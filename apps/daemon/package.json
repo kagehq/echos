@@ -1,0 +1,23 @@
+{
+  "name": "@echos/daemon",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "h3": "^1.11.1",
+    "listhen": "^1.8.1",
+    "ws": "^8.18.0",
+    "yaml": "^2.4.2",
+    "pathe": "^1.1.2",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.4",
+    "@types/ws": "^8.5.10",
+    "@types/node": "^20.12.7"
+  }
+}
+

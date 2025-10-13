@@ -1,0 +1,21 @@
+{
+  "name": "echos",
+  "private": true,
+  "packageManager": "pnpm@10.12.4",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "turbo build",
+    "build:sdk": "pnpm -C packages/sdk build",
+    "build:demo": "pnpm -C packages/demo build",
+    "build:all": "pnpm build:sdk && pnpm build:demo",
+    "dev": "turbo run dev --parallel",
+    "dev:daemon": "pnpm -C apps/daemon dev",
+    "dev:dashboard": "pnpm -C apps/dashboard dev",
+    "demo": "node packages/demo/dist/index.js",
+    "prep": "pnpm -r install && turbo prune --scope=@echos/demo --docker"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}
+

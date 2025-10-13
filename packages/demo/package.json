@@ -1,0 +1,23 @@
+{
+  "name": "@echos/demo",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "echos-demo": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts"
+  },
+  "dependencies": {
+    "@echos/sdk": "workspace:*",
+    "execa": "^9.3.0",
+    "open": "^10.1.0",
+    "wait-port": "^1.1.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.4",
+    "@types/node": "^20.12.7"
+  }
+}
+

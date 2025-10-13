@@ -1,0 +1,32 @@
+# Example Echos Policy Configuration
+# Save this to ~/.echos/echos.yaml
+
+# Actions that are automatically allowed
+allow:
+  - "llm.chat:.*"              # Allow all LLM chat requests
+  - "http.request:https://api.openai.com/.*"  # Allow OpenAI API
+  - "http.request:https://api.anthropic.com/.*"  # Allow Anthropic API
+
+# Actions that require user confirmation
+ask:
+  - "slack.post:.*"            # Always ask before posting to Slack
+  - "email.send:.*"            # Always ask before sending emails
+  - "http.request:https://hooks.slack.com/.*"  # Ask before webhooks
+  - "fs.delete:.*important.*"  # Ask before deleting important files
+
+# Actions that are always blocked
+block:
+  - "fs.delete:/etc/.*"        # Block system file deletion
+  - "fs.delete:/var/.*"        # Block var directory deletion
+  - "email.send:.*@competitor.com"  # Block emails to competitors
+  - "slack.post:#exec-.*"      # Block posts to executive channels
+
+# Optional: Send Slack alerts for certain actions
+# slackWebhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+# Tips:
+# - Patterns use regex: .* matches anything, \\. matches literal dot
+# - Format is "intent:target" where target is optional
+# - First matching rule wins (order: block, ask, allow)
+# - Edit this file anytime - daemon reloads automatically
+
