@@ -14,7 +14,13 @@ export default defineNuxtConfig({
     head: {
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
-      ]
+      ],
+      htmlAttrs: {
+        style: 'background:#000'
+      },
+      bodyAttrs: {
+        style: 'background:#000;margin:0;padding:0'
+      }
     }
   },
   runtimeConfig: {

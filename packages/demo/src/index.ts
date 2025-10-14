@@ -160,14 +160,13 @@ async function run() {
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("✅ Demo complete!");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("\n📊 Check the dashboard:");
-  console.log("   • Feed: See all events in real-time with live WebSocket updates");
-  console.log("   • Timeline: Review historical actions - click events to expand!");
-  console.log("   • Metrics: View performance analytics and activity charts");
-  console.log("   • Roles: Manage policy templates and view applied roles (we just applied one!)");
-  console.log("   • Event Details: Click any event to see request/response/metadata");
-  console.log("   • Policy Transparency: See which rule matched for each decision");
-  console.log("   • Tokens: Manage active authorizations");
+  console.log("\n📊 Check the dashboard at http://localhost:3000:");
+  console.log("   • Feed: Real-time events with search, filtering, and copy buttons");
+  console.log("   • Timeline: Historical audit log with expandable details");
+  console.log("   • Metrics: Performance analytics and activity charts");
+  console.log("   • Roles: Manage policy templates and role assignments");
+  console.log("   • DevTools: Test policies, validate YAML, manage webhooks");
+  console.log("   • Tokens: View and manage active authorizations");
   console.log("\n⌨️  Press Ctrl+C to stop all services.\n");
 
   process.on("SIGINT", () => { 

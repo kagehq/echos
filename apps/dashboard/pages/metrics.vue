@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { useDaemonApi } from '~/composables/useDaemonApi';
+import { useToast } from '~/composables/useToast';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -20,8 +21,9 @@ useHead({
 
 // Watchdog timer for daemon API calls
 const { request, daemonError } = useDaemonApi();
+const { error: showError } = useToast();
 
-const { $ws } = useNuxtApp();
+const { $ws } = useNuxtApp() as any;
 const refreshing = ref(false);
 const timeRange = ref('1h'); // 1h, 24h, 7d, 30d
 const events = ref<any[]>([]);
@@ -236,6 +238,13 @@ onMounted(async () => {
       } catch {}
     });
   }
+
+  // Watch for daemon errors and show toast
+  watch(daemonError, (error) => {
+    if (error) {
+      showError("Connection error. The daemon may be down.")
+    }
+  });
 });
 </script>
 
@@ -273,12 +282,15 @@ onMounted(async () => {
       </template>
     </AppHeader>
 
-    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
-
     <!-- Main content -->
     <main class="flex-1 overflow-y-auto p-6">
+      <!-- Loading State -->
+      <div v-if="refreshing && !events.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <SkeletonLoader type="metric" :count="6" />
+      </div>
+      
       <!-- Metric cards -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <!-- Total Events -->
         <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
           <div class="flex items-center justify-between mb-2">

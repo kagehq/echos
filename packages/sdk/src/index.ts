@@ -2,19 +2,39 @@ import { request } from "undici";
 import { nanoid } from "nanoid";
 
 const ENDPOINT = process.env.ECHOS_ENDPOINT ?? "http://127.0.0.1:3434";
+const DEBUG_MODE = process.env.ECHOS_DEBUG === "1";
+
 type Decision = "allow"|"block"|"ask";
 type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean };
 export type EchosToken = { token:string; expiresAt:number; scopes:string[]; status:"active"|"paused"|"revoked" };
 
+// Debug logging helper
+function debug(...args: any[]) {
+  if (DEBUG_MODE) {
+    console.log('[ECHOS SDK]', new Date().toISOString(), ...args);
+  }
+}
+
 async function postJSON<T=any>(path:string, body:any){ try{
+  debug('POST', path, { bodyPreview: JSON.stringify(body).substring(0, 100) });
   const res = await request(`${ENDPOINT}${path}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
-  return await res.body.json() as T;
-}catch{ return undefined as any; } }
+  const data = await res.body.json() as T;
+  debug('Response', path, { status: res.statusCode, dataPreview: JSON.stringify(data).substring(0, 100) });
+  return data;
+}catch(err){ 
+  debug('Error', path, err instanceof Error ? err.message : String(err));
+  return undefined as any; 
+} }
 
 export class EchosClient {
-  constructor(public agent="default"){}
+  constructor(public agent="default"){
+    debug('EchosClient created', { agent, endpoint: ENDPOINT });
+  }
   private token: EchosToken | null = null;
-  setToken(t:EchosToken|null){ this.token = t; }
+  setToken(t:EchosToken|null){ 
+    debug('Token set', { agent: this.agent, hasToken: !!t });
+    this.token = t; 
+  }
   authHeader(){ return (this.token && this.token.status==="active" && Date.now()<this.token.expiresAt) ? {"x-echos-token": this.token.token } : {}; }
 
   // Sugar: agent.authorize({ scopes, durationSec, reason })
@@ -31,24 +51,41 @@ export class EchosClient {
   }
 
   async emit(intent:string, target?:string, meta?:any, request?:any, response?:any, metadata?:any){
+    debug('emit()', { agent: this.agent, intent, target, hasToken: !!this.token });
+    
     const evt = { id:nanoid(), ts:Date.now(), agent:this.agent, intent, target, meta, preview:`${intent} → ${target??""}`.trim(), request, response, metadata };
     
     // Include token in decision request if we have one
     const decidePayload:any = { ...evt };
     if (this.token && this.token.status==="active" && Date.now()<this.token.expiresAt) {
       decidePayload.token = this.token.token;
+      debug('Using token for authorization', { scopes: this.token.scopes });
     }
     
-    const decision = await postJSON<{status:Decision, id:string, policy?: PolicyMatch}>("/decide", decidePayload) ?? { status:"allow" as Decision, id:evt.id };
+    const decision = await postJSON<{status:Decision, id:string, policy?: PolicyMatch, message?: string}>("/decide", decidePayload) ?? { status:"allow" as Decision, id:evt.id };
+    debug('Policy decision', { status: decision.status, rule: decision.policy?.rule, source: decision.policy?.source });
 
     if (decision.status === "ask"){
+      debug('Waiting for user consent...');
       const wait = await postJSON<{status:"allow"|"block", token?:EchosToken}>(`/await/${evt.id}`, {});
-      if (!wait || wait.status!=="allow") throw new Error("Echos: action denied");
-      if (wait.token) this.token = wait.token;
+      if (!wait || wait.status!=="allow") {
+        const errorMsg = decision.message || "Echos: action denied";
+        debug('Action denied', { message: errorMsg });
+        throw new Error(errorMsg);
+      }
+      if (wait.token) {
+        debug('Token granted by user', { scopes: wait.token.scopes });
+        this.token = wait.token;
+      }
     }
-    if (decision.status === "block") throw new Error("Echos: action blocked");
+    if (decision.status === "block") {
+      const errorMsg = decision.message || "Echos: action blocked";
+      debug('Action blocked', { message: errorMsg, rule: decision.policy?.rule });
+      throw new Error(errorMsg);
+    }
 
     await postJSON("/events", { ...evt, tokenAttached: !!this.token, policy: decision.policy });
+    debug('Event recorded', { id: evt.id });
     return evt;
   }
 
@@ -129,6 +166,90 @@ export class EchosClient {
       return data?.roles ?? [];
     } catch {
       return [];
+    }
+  }
+
+  // Test a policy without running the agent (dry-run)
+  async testPolicy(opts: {
+    agent?: string;
+    intent: string;
+    target?: string;
+    policy?: { allow?: string[]; ask?: string[]; block?: string[] };
+  }){
+    try {
+      const data = await postJSON<{
+        ok: boolean;
+        status?: string;
+        rule?: string;
+        source?: string;
+        signature?: string;
+        message?: string;
+        error?: string;
+      }>("/policy/test", {
+        agent: opts.agent ?? this.agent,
+        intent: opts.intent,
+        target: opts.target,
+        policy: opts.policy
+      });
+      return data ?? { ok: false, error: "Request failed" };
+    } catch {
+      return { ok: false, error: "Failed to test policy" };
+    }
+  }
+
+  // Validate a YAML template
+  async validateTemplate(yaml: string){
+    try {
+      const data = await postJSON<{
+        ok: boolean;
+        valid: boolean;
+        errors: string[];
+        warnings: string[];
+        parsed?: any;
+      }>("/templates/validate", { yaml });
+      return data ?? { ok: false, valid: false, errors: ["Request failed"], warnings: [] };
+    } catch {
+      return { ok: false, valid: false, errors: ["Failed to validate template"], warnings: [] };
+    }
+  }
+
+  // List webhooks
+  async listWebhooks(){
+    try {
+      const res = await request(`${ENDPOINT}/webhooks`, { method: "GET" });
+      const data = await res.body.json() as any;
+      return data?.webhooks ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  // Add a webhook
+  async addWebhook(url: string){
+    try {
+      const data = await postJSON<{
+        ok: boolean;
+        webhooks?: string[];
+        error?: string;
+      }>("/webhooks", { url });
+      return data ?? { ok: false, error: "Request failed" };
+    } catch {
+      return { ok: false, error: "Failed to add webhook" };
+    }
+  }
+
+  // Remove a webhook
+  async removeWebhook(url: string){
+    try {
+      const res = await request(`${ENDPOINT}/webhooks`, { 
+        method: "DELETE",
+        body: JSON.stringify({ url }),
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.body.json() as any;
+      return { ok: true, webhooks: data?.webhooks ?? [] };
+    } catch {
+      return { ok: false, error: "Failed to remove webhook" };
     }
   }
 }

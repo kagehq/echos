@@ -25,11 +25,40 @@ const clients = new Set<any>();
 const PENDING = new Map<string,(d:any)=>void>();
 const TOKENS = new Map<string, TokenRecord>();
 const TIMELINE: TimelineEntry[] = [];
+const WEBHOOKS: string[] = []; // URLs to notify on events
+const DEBUG_MODE = process.env.ECHOS_DEBUG === "1";
 
 const SECRET_KEY = createSecretKey(process.env.ECHOS_SECRET ? Buffer.from(process.env.ECHOS_SECRET,"utf8") : randomBytes(32));
 const now = ()=>Date.now();
 const broadcast = (msg:any)=>{ const s=JSON.stringify(msg); for(const c of clients){ try{ c.send(s);}catch{} } };
 const safeHash = (token:string)=>"sha256:"+createHash("sha256").update(token).digest("hex");
+
+// Debug logging helper
+const debug = (...args: any[]) => {
+  if (DEBUG_MODE) {
+    console.log('[DEBUG]', new Date().toISOString(), ...args);
+  }
+};
+
+// Webhook notification helper
+async function notifyWebhooks(event: any) {
+  if (!WEBHOOKS.length) return;
+  
+  for (const url of WEBHOOKS) {
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event)
+      }).catch(err => {
+        console.error(`[webhook] Failed to notify ${url}:`, err.message);
+      });
+      debug('Webhook notified:', url);
+    } catch (e) {
+      console.error(`[webhook] Error notifying ${url}:`, e);
+    }
+  }
+}
 
 // Initialize template watcher (file-based policies with hot-reload)
 await initTemplatesWatcher();
@@ -95,12 +124,32 @@ app.use(eventHandler((req) => {
   }
 }));
 
+// Enhanced error context helper
+function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, source?: string): string {
+  const parts = [];
+  
+  if (status === 'block') {
+    parts.push(`Action blocked by policy`);
+    if (matchedRule) parts.push(`Matched rule: "${matchedRule}"`);
+    if (source) parts.push(`Source: ${source}`);
+    parts.push(`Agent "${e.agent}" attempted: ${e.intent}${e.target ? ` → ${e.target}` : ''}`);
+  } else if (status === 'ask') {
+    parts.push(`User approval required`);
+    if (matchedRule) parts.push(`Matched rule: "${matchedRule}"`);
+    parts.push(`Agent "${e.agent}" requesting: ${e.intent}${e.target ? ` → ${e.target}` : ''}`);
+  }
+  
+  return parts.join('. ');
+}
+
 // --- Decide: allow|block|ask ---
 app.use(eventHandler(async (req) => {
   if (req.path !== '/decide' || req.method !== 'POST') return;
   
   const body = await readBody<EventMsg & { token?: string }>(req);
   const { token, ...e } = body;
+  
+  debug('Decision request:', { agent: e.agent, intent: e.intent, target: e.target, hasToken: !!token });
   
   let policyMatch: PolicyMatch;
   
@@ -153,12 +202,18 @@ app.use(eventHandler(async (req) => {
     byToken: false 
   };
   
+  // Build error context for better messages
+  const errorContext = buildErrorContext(e, status, matchedRule || undefined, source);
+  debug('Policy decision:', { status, rule: matchedRule, source, context: errorContext });
+  
   if (status === "ask") {
     const msg = { type:"ask", event:{ ...e, policy: policyMatch }, ts: now() };
     TIMELINE.unshift(msg);
     await broadcast(msg);
+    await notifyWebhooks(msg);
   }
-  return { status, id: e.id, policy: policyMatch };
+  
+  return { status, id: e.id, policy: policyMatch, message: errorContext };
 }));
 
 // Long-poll wait for human decision (from dashboard)
@@ -198,6 +253,8 @@ app.use(eventHandler(async (req)=>{
   const msg = { type:"decision", id, payload, policy, ts: now() };
   TIMELINE.unshift(msg);
   await broadcast(msg);
+  await notifyWebhooks(msg);
+  debug('Human decision:', { id, status: body.status, hasToken: !!payload.token });
   return { ok:true };
 }));
 
@@ -211,6 +268,8 @@ app.use("/tokens/issue", eventHandler(async (req)=>{
   const msg = { type:"token", action:"issued", token: jwt, ts: now() };
   TIMELINE.unshift(msg);
   await broadcast(msg);
+  await notifyWebhooks(msg);
+  debug('Token issued:', { agent: b.agent, scopes: b.scopes, durationSec: b.durationSec });
   return { token: rec };
 }));
 app.use("/tokens/revoke", eventHandler(async (req)=>{ const { token } = await readBody<{token:string}>(req); const t=TOKENS.get(token); if(t){ t.status="revoked"; TOKENS.set(token,t); const msg = { type:"token", action:"revoked", token, ts: now() }; TIMELINE.unshift(msg); await broadcast(msg); } return { ok:true }; }));
@@ -237,6 +296,186 @@ app.use("/tokens/introspect", eventHandler(async (req)=>{
 
 // List available scopes
 app.use("/scopes", eventHandler(async ()=>({ scopes: SCOPES })));
+
+// --- Policy Testing/Dry-Run ---
+app.use("/policy/test", eventHandler(async (req) => {
+  if (req.method !== 'POST') return;
+  
+  const body = await readBody<{ 
+    agent: string; 
+    intent: string; 
+    target?: string;
+    policy?: { allow?: string[]; ask?: string[]; block?: string[] };
+  }>(req);
+  
+  debug('Policy test:', body);
+  
+  const sig = `${body.intent}:${body.target ?? ""}`;
+  let status: Decision = "block";
+  let matchedRule: string | null = null;
+  let source: string | undefined = undefined;
+  
+  try {
+    // Use provided policy or agent's role policy or base policy
+    let policyToUse = POLICY;
+    let policySource = "base";
+    
+    if (body.policy) {
+      // Test with provided policy (dry-run mode)
+      const testPolicy = {
+        allow: (body.policy.allow || []).map(p => new RegExp("^" + p.replace(/\*/g, ".*") + "$")),
+        ask: (body.policy.ask || []).map(p => new RegExp("^" + p.replace(/\*/g, ".*") + "$")),
+        block: (body.policy.block || []).map(p => new RegExp("^" + p.replace(/\*/g, ".*") + "$"))
+      };
+      policyToUse = testPolicy;
+      policySource = "test";
+    } else {
+      // Check if agent has a role-applied policy
+      const rolePol = getResolvedPolicyRegex(body.agent);
+      if (rolePol) {
+        policyToUse = rolePol;
+        policySource = "role";
+      }
+    }
+    
+    // Evaluate policies
+    if ((matchedRule = findMatch(policyToUse.block, sig))) {
+      status = "block";
+      source = `${policySource}_block`;
+    } else if ((matchedRule = findMatch(policyToUse.ask, sig))) {
+      status = "ask";
+      source = `${policySource}_ask`;
+    } else if ((matchedRule = findMatch(policyToUse.allow, sig))) {
+      status = "allow";
+      source = `${policySource}_allow`;
+    }
+  } catch (err) {
+    status = "block";
+    source = "evaluation_failed";
+    return { 
+      ok: false, 
+      error: err instanceof Error ? err.message : String(err),
+      status, 
+      signature: sig 
+    };
+  }
+  
+  const message = buildErrorContext(
+    { id: 'test', agent: body.agent, intent: body.intent, target: body.target, ts: now() }, 
+    status, 
+    matchedRule || undefined, 
+    source
+  );
+  
+  return { 
+    ok: true, 
+    status, 
+    rule: matchedRule, 
+    source,
+    signature: sig,
+    message 
+  };
+}));
+
+// --- Template Validation ---
+app.use("/templates/validate", eventHandler(async (req) => {
+  if (req.method !== 'POST') return;
+  
+  const body = await readBody<{ yaml: string }>(req);
+  
+  debug('Template validation:', body.yaml.substring(0, 100));
+  
+  try {
+    const YAML = await import("yaml");
+    const parsed = YAML.parse(body.yaml);
+    
+    // Validate structure
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    
+    if (!parsed || typeof parsed !== 'object') {
+      errors.push("Invalid YAML: expected an object");
+    } else {
+      // Check recommended fields
+      if (!parsed.name) warnings.push("Missing 'name' field");
+      if (!parsed.description) warnings.push("Missing 'description' field");
+      if (!parsed.version) warnings.push("Missing 'version' field");
+      
+      // Validate policy arrays
+      if (parsed.allow && !Array.isArray(parsed.allow)) {
+        errors.push("'allow' must be an array");
+      }
+      if (parsed.ask && !Array.isArray(parsed.ask)) {
+        errors.push("'ask' must be an array");
+      }
+      if (parsed.block && !Array.isArray(parsed.block)) {
+        errors.push("'block' must be an array");
+      }
+      
+      // Validate patterns (check for suspicious regex)
+      const allPatterns = [
+        ...(parsed.allow || []),
+        ...(parsed.ask || []),
+        ...(parsed.block || [])
+      ];
+      
+      for (const pattern of allPatterns) {
+        if (typeof pattern !== 'string') {
+          errors.push(`Invalid pattern: ${pattern} (must be string)`);
+          continue;
+        }
+        
+        // Check for suspicious patterns
+        if (/\.\*\.\*/.test(pattern)) {
+          warnings.push(`Suspicious pattern "${pattern}": multiple wildcards`);
+        }
+        if (/[\^$\\]/.test(pattern)) {
+          warnings.push(`Pattern "${pattern}": contains regex characters (use simple wildcards like *)`);
+        }
+      }
+    }
+    
+    return { 
+      ok: errors.length === 0, 
+      valid: errors.length === 0,
+      errors, 
+      warnings,
+      parsed: errors.length === 0 ? parsed : undefined
+    };
+  } catch (err) {
+    return { 
+      ok: false, 
+      valid: false,
+      errors: [err instanceof Error ? err.message : String(err)],
+      warnings: []
+    };
+  }
+}));
+
+// --- Webhook Management ---
+app.use("/webhooks", eventHandler(async (req) => {
+  if (req.method === 'GET') {
+    return { webhooks: WEBHOOKS };
+  } else if (req.method === 'POST') {
+    const { url } = await readBody<{ url: string }>(req);
+    if (!url || !url.startsWith('http')) {
+      return { ok: false, error: 'Invalid webhook URL' };
+    }
+    if (!WEBHOOKS.includes(url)) {
+      WEBHOOKS.push(url);
+      debug('Webhook added:', url);
+    }
+    return { ok: true, webhooks: WEBHOOKS };
+  } else if (req.method === 'DELETE') {
+    const { url } = await readBody<{ url: string }>(req);
+    const idx = WEBHOOKS.indexOf(url);
+    if (idx !== -1) {
+      WEBHOOKS.splice(idx, 1);
+      debug('Webhook removed:', url);
+    }
+    return { ok: true, webhooks: WEBHOOKS };
+  }
+}));
 
 // --- Templates & Roles APIs ---
 // List all available templates
@@ -305,7 +544,9 @@ app.use("/events", eventHandler(async (req)=>{
   const e = await readBody<EventMsg>(req); 
   const msg = { type:"event", event:e, ts: e.ts };
   TIMELINE.unshift(msg); 
-  await broadcast(msg); 
+  await broadcast(msg);
+  await notifyWebhooks(msg);
+  debug('Event recorded:', { agent: e.agent, intent: e.intent, target: e.target });
   return { ok:true };
 }));
 

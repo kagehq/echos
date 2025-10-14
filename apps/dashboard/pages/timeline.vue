@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useDaemonApi } from '~/composables/useDaemonApi'
+import { useToast } from '~/composables/useToast'
+import { useCopy } from '~/composables/useCopy'
 
 definePageMeta({
   ssr: false
@@ -15,6 +17,8 @@ useHead({
 
 // Watchdog timer for daemon API calls
 const { request, daemonError } = useDaemonApi()
+const { error: showError, success: showSuccess } = useToast()
+const { copy, copyJSON } = useCopy()
 
 const events = ref<any[]>([])
 const connected = ref(false)
@@ -219,6 +223,15 @@ function toggleEventDetails(index: number) {
     expandedEvents.value.add(index)
   }
 }
+
+// Watch for daemon errors and show toast (client-side only)
+if (process.client) {
+  watch(daemonError, (error) => {
+    if (error) {
+      showError("Connection error. The daemon may be down.")
+    }
+  });
+}
 </script>
 
 <template>
@@ -293,8 +306,6 @@ function toggleEventDetails(index: number) {
       </template>
     </AppHeader>
 
-    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
-
     <section class="flex-1 flex flex-col overflow-hidden">
       <!-- Search bar -->
       <div class="">
@@ -316,9 +327,16 @@ function toggleEventDetails(index: number) {
 
       <!-- Event List -->
       <div class="flex-1 space-y-0.5 py-2 px-4 overflow-y-auto">
-        <div v-if="!getFilteredEvents().length" class="text-center text-gray-500 py-8">
-          {{ searchQuery ? 'No matching events found' : 'No events found. Try running an agent or adjust the time filter.' }}
-        </div>
+        <!-- Loading State -->
+        <SkeletonLoader v-if="loading && !events.length" type="feed" :count="10" />
+        
+        <!-- Empty State -->
+        <EmptyState
+          v-else-if="!getFilteredEvents().length"
+          :icon="searchQuery ? 'search' : 'clock'"
+          :title="searchQuery ? 'No matching events' : 'Timeline is empty'"
+          :description="searchQuery ? 'Try different search terms' : 'Historical events will appear here. Use the time filters above or run agents to generate activity.'"
+        />
         <div class="space-y-0.5">
           <div v-for="(m,i) in getFilteredEvents()" :key="i"
             :class="[

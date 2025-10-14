@@ -1,6 +1,6 @@
 {
   "name": "@echoshq/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "SDK for Echos - A firewall for AI agents. Observe and control every action before it happens.",
   "type": "module",
   "main": "dist/index.js",

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useDaemonApi } from '~/composables/useDaemonApi'
+import { useToast } from '~/composables/useToast'
+import { useCopy } from '~/composables/useCopy'
 
 definePageMeta({
   ssr: false
@@ -14,6 +16,8 @@ useHead({
 })
 
 const { request, daemonError } = useDaemonApi()
+const { error: showError, success: showSuccess } = useToast()
+const { copy, copyJSON } = useCopy()
 
 const templates = ref<any[]>([])
 const roles = ref<any[]>([])
@@ -23,11 +27,9 @@ const resolved = ref<any|null>(null)
 const overrides = ref<{allow:string;ask:string;block:string}>({allow:'',ask:'',block:''})
 const applying = ref(false)
 const loading = ref(false)
-const error = ref<string|null>(null)
 
 async function loadTemplates(){
   loading.value = true
-  error.value = null
   const r = await request<{templates: any[]}>('/templates')
   if (r) {
     templates.value = r.templates || []
@@ -47,12 +49,11 @@ async function loadRoles(){
 
 async function applyRole(){
   if (!agentId.value.trim()) {
-    error.value = 'Agent ID is required'
+    showError('Agent ID is required')
     return
   }
   
   applying.value = true
-  error.value = null
   
   const ov:any = {}
   if (overrides.value.allow.trim()) ov.allow = overrides.value.allow.split(',').map(s=>s.trim())
@@ -65,12 +66,13 @@ async function applyRole(){
   })
   
   if (result?.ok) {
+    showSuccess(`Role "${selectedTemplate.value}" applied to ${agentId.value}`)
     await viewResolved()
     await loadRoles()
     // Clear overrides after successful application
     overrides.value = {allow:'',ask:'',block:''}
   } else if (result?.error) {
-    error.value = result.error
+    showError(result.error)
   }
   
   applying.value = false
@@ -94,6 +96,15 @@ const selectedTemplateDetails = computed(() => {
 onMounted(async ()=>{
   await refresh()
 })
+
+// Watch for daemon errors and show toast (client-side only)
+if (process.client) {
+  watch(daemonError, (error) => {
+    if (error) {
+      showError("Connection error. The daemon may be down.")
+    }
+  })
+}
 </script>
 
 <template>
@@ -104,34 +115,16 @@ onMounted(async ()=>{
           :disabled="loading"
           class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
           @click="refresh">
-          {{ loading ? 'Loading...' : 'Refresh' }}
+          {{ loading ? 'Refreshing...' : 'Refresh' }}
         </button>
       </template>
     </AppHeader>
-
-    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
 
     <main class="flex-1 overflow-auto px-6 py-4">
       <div class="max-w-7xl mx-auto">
         <div class="mb-6">
           <h1 class="text-2xl font-semibold text-white mb-2">Roles & Templates</h1>
           <p class="text-gray-400 text-sm">Apply policy templates to agents with optional overrides</p>
-        </div>
-
-        <!-- Error Banner -->
-        <div v-if="error" class="mb-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-start gap-3">
-          <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div class="flex-1">
-            <p class="text-red-300 text-sm font-medium">Error</p>
-            <p class="text-red-400 text-xs mt-1">{{ error }}</p>
-          </div>
-          <button @click="error = null" class="text-red-400 hover:text-red-300">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
 
         <div class="grid lg:grid-cols-3 gap-6">
@@ -278,9 +271,16 @@ onMounted(async ()=>{
             <div class="border border-gray-500/20 rounded-lg p-4 bg-gray-500/5">
               <h2 class="text-xs font-medium text-gray-500 mb-4 uppercase tracking-wide">Role Assignments</h2>
               
-              <div v-if="!roles.length" class="text-sm text-gray-500 py-8 text-center">
-                No roles assigned yet
-              </div>
+              <!-- Loading State -->
+              <SkeletonLoader v-if="loading && !roles.length" type="card" :count="2" />
+              
+              <!-- Empty State -->
+              <EmptyState
+                v-else-if="!roles.length"
+                icon="inbox"
+                title="No roles assigned"
+                description="Apply a template to an agent to get started. Roles define what actions agents can perform."
+              />
               <div v-else class="space-y-2">
                 <div 
                   v-for="role in roles" 

@@ -129,16 +129,35 @@ export async function ensureTemplatesScaffold() {
 async function loadAllTemplates() {
   const files = (await fs.readdir(TEMPLATES_DIR)).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
   templates.clear();
+  let failedCount = 0;
   for (const f of files) {
     try {
-      const raw = YAML.parse(await fs.readFile(join(TEMPLATES_DIR, f), "utf8")) as RawPolicy;
+      const content = await fs.readFile(join(TEMPLATES_DIR, f), "utf8");
+      const raw = YAML.parse(content) as RawPolicy;
+      
+      // Validate required fields
+      if (!raw || typeof raw !== 'object') {
+        throw new Error("Invalid YAML structure: expected an object");
+      }
+      
       const key = f.replace(/\.(yaml|yml)$/i, "");
       templates.set(key, raw);
+      console.log(`[templates] ✓ Loaded ${f}`);
     } catch (e) {
-      console.warn("[templates] Failed to parse", f, e);
+      failedCount++;
+      console.error(`[templates] ✗ Failed to parse ${f}:`);
+      if (e instanceof Error) {
+        console.error(`  Error: ${e.message}`);
+        if (e.stack) {
+          const stackLines = e.stack.split('\n').slice(1, 3);
+          stackLines.forEach(line => console.error(`  ${line.trim()}`));
+        }
+      } else {
+        console.error(`  ${String(e)}`);
+      }
     }
   }
-  console.log(`[templates] Loaded ${templates.size} templates`);
+  console.log(`[templates] Loaded ${templates.size}/${files.length} templates${failedCount > 0 ? ` (${failedCount} failed)` : ''}`);
 }
 
 async function saveRoles() {

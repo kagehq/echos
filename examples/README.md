@@ -22,6 +22,15 @@ Demonstrates the roles and templates system for managing agent policies programm
 tsx examples/roles-templates.ts
 ```
 
+### 🛠️ Developer Tools (`developer-tools.ts`)
+Showcases advanced developer tools for testing and debugging policies.
+
+**Features**: Policy testing (dry-run), template validation, webhook management, debug mode
+
+```bash
+tsx examples/developer-tools.ts
+```
+
 ### 🤖 RecruitBot (`recruit-bot.ts`)
 Automated candidate outreach with email drafting and calendar scheduling.
 

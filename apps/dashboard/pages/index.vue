@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useDaemonApi } from '~/composables/useDaemonApi'
+import { useCopy } from '~/composables/useCopy'
+import { useToast } from '~/composables/useToast'
 
 definePageMeta({
   ssr: false
@@ -15,12 +17,13 @@ useHead({
 
 // Watchdog timer for daemon API calls
 const { request, daemonError } = useDaemonApi()
+const { copy, copyJSON } = useCopy()
+const { error: showError, success: showSuccess } = useToast()
 
 const feed = ref<any[]>([])
 const ask = ref<any|null>(null)
 const tokens = ref<any[]>([])
 const connected = ref(false)
-const modalError = ref<string|null>(null)
 const modalLoading = ref(false)
 const timeoutId = ref<number|null>(null)
 const sidebarOpen = ref(true)
@@ -160,9 +163,16 @@ if (process.client) {
     if (timeoutId.value) clearTimeout(timeoutId.value)
     if (newAsk) {
       timeoutId.value = window.setTimeout(() => {
-        modalError.value = "⏱️ Request timed out. The agent may have moved on."
-        setTimeout(() => { ask.value = null; modalError.value = null }, 3000)
+        showError("⏱️ Request timed out. The agent may have moved on.")
+        ask.value = null
       }, 120000) // 2 minutes
+    }
+  })
+
+  // Watch for daemon errors and show toast
+  watch(daemonError, (error) => {
+    if (error) {
+      showError("Connection error. The daemon may be down.")
     }
   })
 }
@@ -227,7 +237,7 @@ onMounted(async () => {
     $ws.addEventListener("message", (e: MessageEvent) => {
       const msg = JSON.parse(e.data)
       feed.value.unshift(msg)
-      if (msg.type === "ask") { ask.value = msg.event; modalError.value = null }
+      if (msg.type === "ask") { ask.value = msg.event }
       if (msg.type === "token") refreshTokens()
     })
   }
@@ -262,7 +272,6 @@ function humanIntent(e:any){
 async function deny(){ 
   if(!ask.value) return; 
   modalLoading.value = true
-  modalError.value = null
   try {
     // Use watchdog timer with 3s timeout for user actions
     const result = await request(`/decide/${ask.value.id}`, { 
@@ -273,11 +282,12 @@ async function deny(){
     if (result) {
       if (timeoutId.value) clearTimeout(timeoutId.value)
       ask.value = null
+      showSuccess('Permission denied')
     } else {
-      modalError.value = "❌ Failed to send decision. Retry?"
+      showError("Failed to send decision. Please try again.")
     }
   } catch(e) {
-    modalError.value = "❌ Failed to send decision. Retry?"
+    showError("Failed to send decision. Please try again.")
   } finally {
     modalLoading.value = false
   }
@@ -286,7 +296,6 @@ async function deny(){
 async function allowOnce(){ 
   if(!ask.value) return; 
   modalLoading.value = true
-  modalError.value = null
   try {
     // Use watchdog timer with 3s timeout for user actions
     const result = await request(`/decide/${ask.value.id}`, { 
@@ -297,11 +306,12 @@ async function allowOnce(){
     if (result) {
       if (timeoutId.value) clearTimeout(timeoutId.value)
       ask.value = null
+      showSuccess('Permission granted for this request')
     } else {
-      modalError.value = "❌ Failed to send decision. Retry?"
+      showError("Failed to send decision. Please try again.")
     }
   } catch(e) {
-    modalError.value = "❌ Failed to send decision. Retry?"
+    showError("Failed to send decision. Please try again.")
   } finally {
     modalLoading.value = false
   }
@@ -310,7 +320,6 @@ async function allowOnce(){
 async function allowFor(durationSec:number, scopes:string[]){ 
   if(!ask.value) return;
   modalLoading.value = true
-  modalError.value = null
   try {
     // Use watchdog timer with 3s timeout for user actions
     const result = await request(`/decide/${ask.value.id}`, { 
@@ -322,11 +331,12 @@ async function allowFor(durationSec:number, scopes:string[]){
       if (timeoutId.value) clearTimeout(timeoutId.value)
       ask.value = null
       await refreshTokens()
+      showSuccess(`Token granted for ${durationSec/3600}h`)
     } else {
-      modalError.value = "❌ Failed to grant token. Retry?"
+      showError("Failed to grant token. Please try again.")
     }
   } catch(e) {
-    modalError.value = "❌ Failed to grant token. Retry?"
+    showError("Failed to grant token. Please try again.")
   } finally {
     modalLoading.value = false
   }
@@ -440,8 +450,6 @@ async function resume(t:any){
       </template>
     </AppHeader>
 
-    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
-
     <section class="flex-1 flex overflow-hidden relative">
       <div class="flex-1 flex flex-col overflow-hidden">
         <!-- Search bar -->
@@ -464,9 +472,21 @@ async function resume(t:any){
 
         <!-- Feed list -->
         <div class="flex-1 space-y-0.5 py-2 px-4 overflow-y-auto">
-          <div v-if="!getFilteredFeed().length" class="text-center text-gray-500 py-8">
-            {{ searchQuery ? 'No matching events found' : 'No events yet' }}
-          </div>
+          <!-- Loading State -->
+          <SkeletonLoader v-if="refreshing && !feed.length" type="feed" :count="8" />
+          
+          <!-- Empty State -->
+          <EmptyState
+            v-else-if="!getFilteredFeed().length"
+            :icon="searchQuery ? 'search' : 'clock'"
+            :title="searchQuery ? 'No matching events' : 'No events yet'"
+            :description="searchQuery ? 'Try adjusting your search terms' : 'Events will appear here as agents perform actions. Try running the demo to generate some activity.'"
+          >
+            <div v-if="!searchQuery" class="mt-4 text-xs text-gray-500 bg-gray-500/5 border border-gray-500/20 rounded-lg p-3 max-w-md">
+              <p class="font-medium text-gray-400 mb-1">💡 Quick Tip:</p>
+              <p>Run <code class="px-1 py-0.5 bg-gray-500/20 rounded text-blue-300">pnpm demo</code> to generate test events</p>
+            </div>
+          </EmptyState>
           <div v-for="(m,i) in getFilteredFeed()" :key="i" 
             :class="[
               'rounded-lg transition-colors',
@@ -525,16 +545,36 @@ async function resume(t:any){
               <div class="space-y-3 text-xs">
                 <!-- Decision-specific fields -->
                 <template v-if="m.type === 'decision'">
-                  <div v-if="m.id" class="flex gap-2">
+                  <div v-if="m.id" class="flex gap-2 items-center">
                     <span class="text-gray-500 w-20 shrink-0">Event ID:</span>
-                    <span class="text-white font-mono">{{ m.id }}</span>
+                    <span class="text-white font-mono flex-1">{{ m.id }}</span>
+                    <button 
+                      @click="copy(m.id, 'Event ID')"
+                      class="shrink-0 p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                      title="Copy event ID"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
                   </div>
                   <div v-if="m.payload" class="flex gap-2">
                     <span class="text-gray-500 w-20 shrink-0">Decision:</span>
                     <span :class="m.payload.status === 'allow' ? 'text-green-300' : 'text-red-400'" class="font-mono font-bold">{{ m.payload.status?.toUpperCase() }}</span>
                   </div>
                   <div v-if="m.payload?.token" class="flex gap-2 flex-col">
-                    <span class="text-gray-500">Token Granted:</span>
+                    <div class="flex items-center justify-between">
+                      <span class="text-gray-500">Token Granted:</span>
+                      <button 
+                        @click="copyJSON(m.payload.token, 'Token')"
+                        class="p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                        title="Copy token JSON"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
                     <pre class="text-green-300 font-mono bg-black/30 p-2 rounded overflow-x-auto">{{ JSON.stringify(m.payload.token, null, 2) }}</pre>
                   </div>
                   
@@ -568,9 +608,18 @@ async function resume(t:any){
                     <span class="text-gray-500 w-20 shrink-0">Action:</span>
                     <span class="text-blue-300 font-mono font-bold">{{ m.action?.toUpperCase() }}</span>
                   </div>
-                  <div v-if="m.token" class="flex gap-2">
+                  <div v-if="m.token" class="flex gap-2 items-start">
                     <span class="text-gray-500 w-20 shrink-0">Token:</span>
-                    <span class="text-white font-mono break-all text-xs">{{ m.token }}</span>
+                    <span class="text-white font-mono break-all text-xs flex-1">{{ m.token }}</span>
+                    <button 
+                      @click="copy(m.token, 'Token')"
+                      class="shrink-0 p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                      title="Copy token"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
                   </div>
                 </template>
                 
@@ -643,20 +692,53 @@ async function resume(t:any){
                   </div>
                   
                   <!-- Request -->
-                  <div v-if="m.event?.request" class="flex gap-2">
-                    <span class="text-gray-500 w-20 shrink-0">Request:</span>
+                  <div v-if="m.event?.request" class="flex gap-2 flex-col">
+                    <div class="flex items-center justify-between">
+                      <span class="text-gray-500 w-20 shrink-0">Request:</span>
+                      <button 
+                        @click="copyJSON(m.event.request, 'Request')"
+                        class="p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                        title="Copy request JSON"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
                     <pre class="text-sky-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.request, null, 2) }}</pre>
                   </div>
                   
                   <!-- Response -->
-                  <div v-if="m.event?.response" class="flex gap-2">
-                    <span class="text-gray-500 w-20 shrink-0">Response:</span>
+                  <div v-if="m.event?.response" class="flex gap-2 flex-col">
+                    <div class="flex items-center justify-between">
+                      <span class="text-gray-500 w-20 shrink-0">Response:</span>
+                      <button 
+                        @click="copyJSON(m.event.response, 'Response')"
+                        class="p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                        title="Copy response JSON"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
                     <pre class="text-green-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.response, null, 2) }}</pre>
                   </div>
                   
                   <!-- Metadata -->
-                  <div v-if="m.event?.metadata" class="flex gap-2">
-                    <span class="text-gray-500 w-20 shrink-0">Metadata:</span>
+                  <div v-if="m.event?.metadata" class="flex gap-2 flex-col">
+                    <div class="flex items-center justify-between">
+                      <span class="text-gray-500 w-20 shrink-0">Metadata:</span>
+                      <button 
+                        @click="copyJSON(m.event.metadata, 'Metadata')"
+                        class="p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                        title="Copy metadata JSON"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
                     <pre class="text-purple-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.metadata, null, 2) }}</pre>
                   </div>
                   
@@ -723,9 +805,31 @@ async function resume(t:any){
         <div v-show="sidebarOpen" class="min-w-96">
           <h2 class="text-xs uppercase font-medium tracking-wide text-gray-500 border-b border-gray-500/20 p-4">Tokens</h2>
           <div class="p-4 space-y-2">
-            <div v-if="!tokens.length" class="text-sm text-gray-500">You don't have any active tokens</div>
+            <!-- Loading State -->
+            <SkeletonLoader v-if="refreshing && !tokens.length" type="token" :count="2" />
+            
+            <!-- Empty State -->
+            <EmptyState
+              v-else-if="!tokens.length"
+              icon="token"
+              title="No active tokens"
+              description="Grant tokens to agents for time-limited permissions without manual approval"
+            />
+            
+            <!-- Token List -->
             <div v-for="t in tokens" :key="t.token" class="border border-gray-500/20 rounded-lg p-3">
-              <div class="text-xs break-all text-gray-400 mb-2">{{ t.token.slice(0,28) }}…</div>
+              <div class="flex items-center gap-2 mb-2">
+                <div class="text-xs break-all text-gray-400 flex-1">{{ t.token.slice(0,28) }}…</div>
+                <button 
+                  @click="copy(t.token, 'Token')"
+                  class="shrink-0 p-1.5 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
+                  title="Copy full token"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
               <div class="text-xs uppercase text-gray-400">Agent: <span class="text-white">{{ t.agent }}</span></div>
               <div class="text-xs uppercase text-gray-400">Scopes: <span class="font-mono text-white">{{ t.scopes.join(", ") }}</span></div>
               <div class="text-xs uppercase text-gray-400">Expires: <span class="text-white">{{ new Date(t.expiresAt).toLocaleTimeString() }}</span></div>
@@ -750,11 +854,6 @@ async function resume(t:any){
           <b>{{ ask.agent }}</b> wants to
           <b>{{ humanIntent(ask) }}</b>.
         </p>
-        
-        <!-- Error message -->
-        <div v-if="modalError" class="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-          {{ modalError }}
-        </div>
         
         <div class="flex gap-3 justify-end font-medium text-sm">
           <button 
