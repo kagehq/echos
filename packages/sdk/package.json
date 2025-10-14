@@ -1,9 +1,33 @@
 {
   "name": "@echoshq/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "Official SDK for Echos - A Wireshark for AI agents. Visualize and control every action your agents take in real time.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "monitoring",
+    "observability",
+    "human-in-the-loop",
+    "policy",
+    "authorization",
+    "sdk"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kagehq/echos.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/kagehq/echos",
+  "bugs": "https://github.com/kagehq/echos/issues",
+  "license": "FSL-1.1-MIT",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts"
   },
