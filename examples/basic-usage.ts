@@ -4,7 +4,7 @@
  * This example shows how to integrate Echos into your AI agent code.
  */
 
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 
 async function main() {
   // Create a client for your agent

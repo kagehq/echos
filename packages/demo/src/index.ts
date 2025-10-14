@@ -2,7 +2,7 @@
 import { execa } from "execa";
 import open from "open";
 import waitPort from "wait-port";
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 

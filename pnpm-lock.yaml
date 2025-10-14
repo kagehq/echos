@@ -91,7 +91,7 @@ importers:
 
   packages/demo:
     dependencies:
-      '@echos/sdk':
+      '@echoshq/sdk':
         specifier: workspace:*
         version: link:../sdk
       execa:

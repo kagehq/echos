@@ -24,7 +24,7 @@ The demo starts the daemon (`:3434`), dashboard (`:3000`), and runs a sample age
 ## Usage
 
 ```typescript
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 
 const agent = echos("my_agent");
 

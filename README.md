@@ -25,7 +25,7 @@ pnpm dev:dashboard # Start dashboard in another terminal
 ## Usage
 
 ```typescript
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 
 const agent = echos("my_agent");
 

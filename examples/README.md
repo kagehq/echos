@@ -72,7 +72,7 @@ curl http://127.0.0.1:3434/scopes | jq
 ## Building Your Own Agent
 
 ```typescript
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 
 const agent = echos("MyAgent");
 

@@ -7,7 +7,7 @@
  * while LLM chats are auto-allowed.
  */
 
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 
 const agent = echos("SalesBot");
 

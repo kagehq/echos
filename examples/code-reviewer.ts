@@ -7,7 +7,7 @@
  * and email sending require human approval.
  */
 
-import { echos } from "@echos/sdk";
+import { echos } from "@echoshq/sdk";
 
 const agent = echos("CodeReviewer");
 
