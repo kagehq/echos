@@ -128,8 +128,7 @@ ECHOS_DEBUG=1          # Verbose logging
 
 ## More
 
-- **[QUICKSTART.md](./QUICKSTART.md)** - Detailed setup guide
-- **[examples/](./examples/)** - Usage examples
+- **[examples/](./examples/)** - Usage examples and patterns
 
 ## License
 

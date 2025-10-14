@@ -181,9 +181,7 @@ Then visit `http://localhost:3000` to:
 
 ## More
 
-- **[Echos Repository](https://github.com/kagehq/echos)** - Full documentation
-- **[Examples](https://github.com/kagehq/echos/tree/main/examples)** - Code samples
-- **[Quickstart Guide](https://github.com/kagehq/echos/blob/main/QUICKSTART.md)** - Setup guide
+- **[Echos Repository](https://github.com/kagehq/echos)** - Full documentation and examples
 
 ## License
 

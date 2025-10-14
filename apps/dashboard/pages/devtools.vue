@@ -68,12 +68,10 @@ async function testPolicy() {
       }
     }
     
-    console.log('[DevTools] Testing policy:', body)
     const result = await request<any>('/policy/test', {
       method: 'POST',
       body
     })
-    console.log('[DevTools] Policy test result:', result)
     
     if (result) {
       testResult.value = result
@@ -98,12 +96,10 @@ async function validateTemplate() {
   validationResult.value = null
   
   try {
-    console.log('[DevTools] Validating template, length:', yamlTemplate.value.length)
     const result = await request<any>('/templates/validate', {
       method: 'POST',
       body: { yaml: yamlTemplate.value }
     })
-    console.log('[DevTools] Validation result:', result)
     
     if (result) {
       validationResult.value = result
