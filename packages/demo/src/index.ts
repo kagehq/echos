@@ -45,13 +45,27 @@ async function run() {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   
   console.log("1️⃣  LLM chat → Should be ALLOWED by policy");
-  await agent.emit("llm.chat", "gpt-4", { prompt:"Analyze sales data" });
+  await agent.emit(
+    "llm.chat", 
+    "gpt-4", 
+    { prompt:"Analyze sales data" },
+    { model: "gpt-4", temperature: 0.7, max_tokens: 500 },
+    { choices: [{ message: { content: "Sales analysis complete..." }}], usage: { total_tokens: 142 }},
+    { latency: "850ms", cost: "$0.002" }
+  );
   await new Promise(resolve => setTimeout(resolve, 1500));
   
   console.log("2️⃣  Slack post → Should ASK for permission");
   console.log("   💡 Check dashboard - consent modal should appear!");
   try { 
-    await agent.emit("slack.post", "#sales", { text:"Q4 results ready" }); 
+    await agent.emit(
+      "slack.post", 
+      "#sales", 
+      { text:"Q4 results ready" },
+      { channel: "#sales", text: "Q4 results ready", as_user: true },
+      { ok: true, channel: "C1234567890", ts: "1729000000.123456" },
+      { retry_count: 0 }
+    ); 
     console.log("   ✅ Action allowed");
   } catch (err) { 
     console.log("   ❌ Action denied or timed out");
@@ -60,7 +74,14 @@ async function run() {
   
   console.log("3️⃣  File delete → Should be BLOCKED by policy");
   try { 
-    await agent.emit("fs.delete", "/tmp/cache.db"); 
+    await agent.emit(
+      "fs.delete", 
+      "/tmp/cache.db",
+      { force: true },
+      { path: "/tmp/cache.db", recursive: false },
+      null,
+      { would_delete: "500MB" }
+    ); 
   } catch (err) { 
     console.log("   ❌ Action blocked by policy (expected)");
   }
@@ -73,18 +94,39 @@ async function run() {
   console.log("4️⃣  First calendar access → will ASK for permission");
   console.log("   💡 In the dashboard, click 'Allow 1h' to grant a token!");
   try {
-    await agent.emit("calendar.read", "team-calendar");
+    await agent.emit(
+      "calendar.read", 
+      "team-calendar",
+      { timeMin: "2025-01-01T00:00:00Z" },
+      { calendar: "team-calendar", query: "meetings" },
+      { events: [{ id: "evt_123", summary: "Q4 Review", start: "2025-01-15T10:00:00Z" }]},
+      { event_count: 3 }
+    );
     console.log("   ✅ First action approved!");
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     // If we got here, the user granted a token via "Allow 1h"
     console.log("5️⃣  Second calendar access → using the token");
-    await agent.emit("calendar.write", "team-calendar", { title: "Q4 Planning" });
+    await agent.emit(
+      "calendar.write", 
+      "team-calendar", 
+      { title: "Q4 Planning" },
+      { summary: "Q4 Planning", start: "2025-01-20T14:00:00Z", attendees: ["team@company.com"] },
+      { created: true, event_id: "evt_456", html_link: "https://calendar.google.com/event?eid=..." },
+      { attendee_count: 5 }
+    );
     console.log("   ✅ No consent needed - token was used!");
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     console.log("6️⃣  Third calendar access → still using the same token");
-    await agent.emit("calendar.read", "shared-calendar");
+    await agent.emit(
+      "calendar.read", 
+      "shared-calendar",
+      {},
+      { calendar: "shared-calendar" },
+      { events: [{ id: "evt_789", summary: "Team Standup" }]},
+      { event_count: 1 }
+    );
     console.log("   ✅ All subsequent actions use the same token!");
   } catch (err) {
     console.log("   ❌ Action was denied");
@@ -94,8 +136,11 @@ async function run() {
   console.log("✅ Demo complete!");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("\n📊 Check the dashboard:");
-  console.log("   • Feed: See all events in real-time");
-  console.log("   • Timeline: Review historical actions");
+  console.log("   • Feed: See all events in real-time with live WebSocket updates");
+  console.log("   • Timeline: Review historical actions - click events to expand!");
+  console.log("   • Metrics: View performance analytics and activity charts");
+  console.log("   • Event Details: Click any event to see request/response/metadata");
+  console.log("   • Policy Transparency: See which rule matched for each decision");
   console.log("   • Tokens: Manage active authorizations");
   console.log("\n⌨️  Press Ctrl+C to stop all services.\n");
 
