@@ -143,8 +143,13 @@ app.use(eventHandler(async (req)=>{
     TOKENS.set(jwt, rec);
     payload = { status:"allow", token: rec };
   }
+  
+  // Find the original ask event to include policy information
+  const originalAsk = TIMELINE.find((e: any) => e.type === "ask" && e.event?.id === id) as any;
+  const policy = originalAsk?.event?.policy;
+  
   const fn = PENDING.get(id); if (fn){ fn(payload); PENDING.delete(id); }
-  const msg = { type:"decision", id, payload, ts: now() };
+  const msg = { type:"decision", id, payload, policy, ts: now() };
   TIMELINE.unshift(msg);
   await broadcast(msg);
   return { ok:true };

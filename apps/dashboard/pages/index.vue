@@ -369,6 +369,29 @@ async function resume(t:any){await $fetch('http://127.0.0.1:3434/tokens/resume',
                     <span class="text-gray-500">Token Granted:</span>
                     <pre class="text-green-300 font-mono bg-black/30 p-2 rounded overflow-x-auto">{{ JSON.stringify(m.payload.token, null, 2) }}</pre>
                   </div>
+                  
+                  <!-- Policy Decision for decision events -->
+                  <div v-if="m.policy" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Original Policy Match:</span>
+                    <div class="ml-4 space-y-1">
+                      <div class="flex gap-2">
+                        <span class="text-gray-500">Status:</span>
+                        <span :class="{
+                          'text-green-300': m.policy.status === 'allow',
+                          'text-red-400': m.policy.status === 'block',
+                          'text-yellow-300': m.policy.status === 'ask'
+                        }" class="font-mono font-bold">{{ m.policy.status?.toUpperCase() }}</span>
+                      </div>
+                      <div v-if="m.policy.rule" class="flex gap-2">
+                        <span class="text-gray-500">Matched Rule:</span>
+                        <span class="text-orange-300 font-mono">{{ m.policy.rule }}</span>
+                      </div>
+                      <div v-if="m.policy.source" class="flex gap-2">
+                        <span class="text-gray-500">Rule Source:</span>
+                        <span class="text-gray-300 font-mono">{{ m.policy.source }} policy</span>
+                      </div>
+                    </div>
+                  </div>
                 </template>
                 
                 <!-- Token action-specific fields -->
