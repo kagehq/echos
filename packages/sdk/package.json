@@ -1,7 +1,7 @@
 {
   "name": "@echoshq/sdk",
-  "version": "0.1.1",
-  "description": "Official SDK for Echos - A Wireshark for AI agents. Visualize and control every action your agents take in real time.",
+  "version": "0.1.2",
+  "description": "SDK for Echos - A firewall for AI agents. Observe and control every action before it happens.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
