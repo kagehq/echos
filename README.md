@@ -32,6 +32,16 @@ const agent = echos("my_agent");
 // Emit actions (checked against policy)
 await agent.emit("slack.post", "#general", { text: "Deploy complete!" });
 
+// Emit with request/response/metadata for debugging
+await agent.emit(
+  "http.request",
+  "https://api.example.com",
+  { method: "GET" },
+  { url: "https://api.example.com", headers: {...} },  // request
+  { status: 200, data: {...} },                        // response
+  { latency: "142ms", retries: 0 }                     // metadata
+);
+
 // Request persistent authorization
 await agent.authorize({
   scopes: ["slack.post", "email.send"],
@@ -72,8 +82,9 @@ block:
 
 ## Features
 
-- **Live Feed** - Real-time WebSocket with auto-reconnect
-- **Timeline** - Historical audit log with replay
+- **Live Feed** - Real-time WebSocket stream with search and filtering
+- **Timeline** - Historical audit log with search and expandable details
+- **Event Details** - Click any event to see full request/response/metadata
 - **Token Management** - View, pause, resume, revoke authorizations
 - **Policy Engine** - Regex-based allow/ask/block rules
 - **JWT Auth** - Scope-based tokens with expiry

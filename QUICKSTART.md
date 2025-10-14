@@ -30,6 +30,16 @@ const agent = echos("my_agent");
 // Emit actions (checked against policy)
 await agent.emit("slack.post", "#general", { text: "Deploy complete!" });
 
+// Emit with debugging details (request/response/metadata)
+await agent.emit(
+  "http.request",
+  "https://api.example.com",
+  { method: "GET" },
+  { url: "https://api.example.com", headers: {...} },  // request
+  { status: 200, data: {...} },                        // response
+  { latency: "142ms" }                                 // metadata
+);
+
 // Request token for repeated actions
 await agent.authorize({
   scopes: ["slack.post", "email.send"],
@@ -78,8 +88,9 @@ tsx your-agent.ts
 
 ## Dashboard
 
-- **Feed** (`/`) - Live stream with WebSocket
-- **Timeline** (`/timeline`) - Historical audit log
+- **Feed** (`/`) - Live stream with WebSocket, search, and refresh
+- **Timeline** (`/timeline`) - Historical audit log with search
+- **Expandable Events** - Click any event to see request/response/metadata details
 - **Token Management** - Manage authorizations (pause/resume/revoke)
 - **Consent Modal** - Approve actions with "Deny", "Allow once", or "Allow 1h"
 
