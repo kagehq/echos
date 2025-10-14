@@ -84,6 +84,7 @@ block:
 
 - **Live Feed** - Real-time WebSocket stream with search and filtering
 - **Timeline** - Historical audit log with search and expandable details
+- **Metrics** - Performance analytics, activity charts, and top intents
 - **Event Details** - Click any event to see full request/response/metadata
 - **Token Management** - View, pause, resume, revoke authorizations
 - **Policy Engine** - Regex-based allow/ask/block rules
@@ -115,4 +116,3 @@ ECHOS_LOCAL_ONLY=1     # Disable network (optional)
 ## License
 
 FSL-1.1-MIT License. See LICENSE file for details.
-

@@ -113,17 +113,12 @@ function toggleEventDetails(index: number) {
         <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/10 rounded-lg p-0.5 px-1">
           <NuxtLink to="/" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Feed</NuxtLink>
           <NuxtLink to="/timeline" class="text-white bg-gray-500/10 rounded-lg p-1 px-2 border border-gray-500/10">Timeline</NuxtLink>
+          <NuxtLink to="/metrics" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Metrics</NuxtLink>
         </nav>
       </h1>
       <div class="flex items-center gap-2">
         <span v-if="filterText" class="text-xs text-gray-400 mr-2">{{ filterText }}</span>
-        <button 
-          :disabled="refreshing"
-          class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
-          @click="refresh">
-          {{ refreshing ? 'Refreshing...' : 'Refresh' }}
-        </button>
-        <span class="text-gray-500/50">|</span>
+        
         <button 
           :disabled="loading"
           class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50" 
@@ -135,6 +130,13 @@ function toggleEventDetails(index: number) {
           class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50" 
           @click="showAll">
           {{ loading ? 'Loading...' : 'Show All' }}
+        </button>
+        <span class="text-gray-500/50">|</span>
+        <button 
+          :disabled="refreshing"
+          class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
+          @click="refresh">
+          {{ refreshing ? 'Refreshing...' : 'Refresh' }}
         </button>
       </div>
     </header>
@@ -158,6 +160,7 @@ function toggleEventDetails(index: number) {
         </div>
       </div>
 
+      <!-- Event List -->
       <div class="flex-1 space-y-0.5 py-2 px-4 overflow-y-auto">
         <div v-if="!getFilteredEvents().length" class="text-center text-gray-500 py-8">
           {{ searchQuery ? 'No matching events found' : 'No events found. Try running an agent or adjust the time filter.' }}

@@ -259,6 +259,7 @@ async function resume(t:any){await $fetch('http://127.0.0.1:3434/tokens/resume',
         <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/15 rounded-lg p-0.5 px-1">
           <NuxtLink to="/" class="text-white bg-gray-500/20 rounded-lg p-1 px-2 border border-gray-500/20">Feed</NuxtLink>
           <NuxtLink to="/timeline" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Timeline</NuxtLink>
+          <NuxtLink to="/metrics" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Metrics</NuxtLink>
         </nav>
         <!-- <span class="text-gray-400 text-sm">Live Feed</span> -->
       </h1>

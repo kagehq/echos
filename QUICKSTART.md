@@ -14,6 +14,7 @@ pnpm demo
 ```
 
 The demo starts the daemon (`:3434`), dashboard (`:3000`), and runs a sample agent with 3 actions:
+
 - ✅ LLM chat → allowed
 - ⚠️  Slack post → asks permission (modal appears!)
 - ❌ File delete → blocked
@@ -90,6 +91,7 @@ tsx your-agent.ts
 
 - **Feed** (`/`) - Live stream with WebSocket, search, and refresh
 - **Timeline** (`/timeline`) - Historical audit log with search
+- **Metrics** (`/metrics`) - Performance analytics, activity charts, and statistics
 - **Expandable Events** - Click any event to see request/response/metadata details
 - **Token Management** - Manage authorizations (pause/resume/revoke)
 - **Consent Modal** - Approve actions with "Deny", "Allow once", or "Allow 1h"
