@@ -2,18 +2,44 @@
 
 A Wireshark for AI agents. Visualize and control every action your agents take in real time.
 
-## Quick Start
+## Installation
 
 ```bash
-# Install and build
+npm install @echoshq/sdk
+```
+
+or
+
+```bash
+pnpm add @echoshq/sdk
+```
+
+## Quick Start
+
+### Try the Demo
+
+Fastest way to see Echos in action:
+
+```bash
+git clone https://github.com/kagehq/echos.git
+cd echos
 pnpm install
 pnpm build:all
-
-# Run the interactive demo
 pnpm demo
 ```
 
 The demo starts the daemon (`:3434`), dashboard (`:3000`), and runs a sample agent showing allowed, blocked, and consent-required actions.
+
+### Use in Your Project
+
+```typescript
+import { echos } from "@echoshq/sdk";
+
+const agent = echos("my_agent");
+await agent.emit("slack.post", "#general", { text: "Hello!" });
+```
+
+Then start the Echos daemon and dashboard separately to monitor your agent.
 
 ## Development
 
@@ -110,6 +136,7 @@ ECHOS_LOCAL_ONLY=1     # Disable network (optional)
 
 ## More
 
+- **[npm package](https://www.npmjs.com/package/@echoshq/sdk)** - View on npm
 - **[QUICKSTART.md](./QUICKSTART.md)** - Detailed setup guide
 - **[examples/](./examples/)** - Usage examples
 
