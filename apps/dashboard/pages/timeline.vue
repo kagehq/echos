@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useDaemonApi } from '~/composables/useDaemonApi'
 
 definePageMeta({
   ssr: false
@@ -11,6 +12,9 @@ useHead({
     { name: 'description', content: 'Historical timeline of agent events and activities' }
   ]
 })
+
+// Watchdog timer for daemon API calls
+const { request, daemonError } = useDaemonApi()
 
 const events = ref<any[]>([])
 const connected = ref(false)
@@ -28,8 +32,10 @@ async function exportTimeline(format: 'ndjson' | 'json' | 'csv' | 'md') {
     exporting.value = true
     showExportMenu.value = false
     
-    const response = await fetch('http://127.0.0.1:3434/timeline')
-    const data = await response.json()
+    // Use watchdog timer with 10s timeout for larger exports
+    const data = await request<{events: any[]}>('/timeline', { timeout: 10000 })
+    if (!data) return // Request failed, error already handled
+    
     const events = data.events || []
     
     let content: string
@@ -102,6 +108,7 @@ async function exportTimeline(format: 'ndjson' | 'json' | 'csv' | 'md') {
     document.body.removeChild(a)
   } catch (error) {
     console.error('Failed to export timeline:', error)
+    // daemonError is automatically managed by useDaemonApi
   } finally {
     exporting.value = false
   }
@@ -136,17 +143,32 @@ function getFilteredEvents() {
 }
 
 onMounted(async ()=>{ 
-  const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
-  events.value = r?.events || []
+  // Use watchdog timer for initial load
+  const result = await request<{events: any[]}>('/timeline')
+  if (result) {
+    events.value = result.events || []
+  }
 })
 
 async function replayLast5m(){
   loading.value = true
   filterText.value = 'Filtering last 5 minutes...'
   const end = Date.now(), start = end - 5*60*1000
-  const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline/replay', { method:"POST", body:{ fromTs:start, toTs:end } })
-  events.value = r?.events || []
-  filterText.value = `Showing ${events.value.length} events from last 5 min`
+  
+  // Use watchdog timer with 5s timeout
+  const result = await request<{events: any[]}>('/timeline/replay', { 
+    method: 'POST', 
+    body: { fromTs: start, toTs: end },
+    timeout: 5000
+  })
+  
+  if (result) {
+    events.value = result.events || []
+    filterText.value = `Showing ${events.value.length} events from last 5 min`
+  } else {
+    filterText.value = 'Failed to load events'
+  }
+  
   loading.value = false
   setTimeout(() => { filterText.value = '' }, 3000)
 }
@@ -154,9 +176,17 @@ async function replayLast5m(){
 async function showAll(){
   loading.value = true
   filterText.value = 'Loading all events...'
-  const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
-  events.value = r?.events || []
-  filterText.value = `Showing all ${events.value.length} events`
+  
+  // Use watchdog timer with 10s timeout (might be large dataset)
+  const result = await request<{events: any[]}>('/timeline', { timeout: 10000 })
+  
+  if (result) {
+    events.value = result.events || []
+    filterText.value = `Showing all ${events.value.length} events`
+  } else {
+    filterText.value = 'Failed to load events'
+  }
+  
   loading.value = false
   setTimeout(() => { filterText.value = '' }, 3000)
 }
@@ -167,8 +197,11 @@ async function refresh(){
     // Add minimum delay to show "Refreshing..." feedback
     await Promise.all([
       (async () => {
-        const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
-        events.value = r?.events || []
+        // Use watchdog timer
+        const result = await request<{events: any[]}>('/timeline')
+        if (result) {
+          events.value = result.events || []
+        }
       })(),
       new Promise(resolve => setTimeout(resolve, 500))
     ])
@@ -190,20 +223,8 @@ function toggleEventDetails(index: number) {
 
 <template>
   <div class="h-screen bg-black text-neutral-100 flex flex-col overflow-hidden">
-    <header class="p-4 py-2 border-b border-gray-500/20 flex items-center justify-between shrink-0">
-      <h1 class="text-lg space-x-2 flex items-center">
-        <div class="flex items-center gap-1">
-          <img src="~/assets/img/logo.png" alt="Echos" class="w-6 h-6"></img>
-          <span class="text-white font-medium text-base">Echos</span>
-        </div>
-        <span class="text-gray-500/40 text-sm">/</span>
-        <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/10 rounded-lg p-0.5 px-1">
-          <NuxtLink to="/" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Feed</NuxtLink>
-          <NuxtLink to="/timeline" class="text-white bg-gray-500/10 rounded-lg p-1 px-2 border border-gray-500/10">Timeline</NuxtLink>
-          <NuxtLink to="/metrics" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Metrics</NuxtLink>
-        </nav>
-      </h1>
-      <div class="flex items-center gap-2">
+    <AppHeader currentPage="timeline">
+      <template #actions>
         <span v-if="filterText" class="text-xs text-gray-400 mr-2">{{ filterText }}</span>
         
         <button 
@@ -242,35 +263,37 @@ function toggleEventDetails(index: number) {
           </button>
           
           <!-- Dropdown menu -->
-          <div v-if="showExportMenu" class="absolute right-0 mt-1 w-40 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+          <div v-if="showExportMenu" class="absolute right-0 mt-1 w-40 bg-black border border-gray-500/20 rounded-lg shadow-xl z-50">
             <button 
               @click="exportTimeline('json')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors first:rounded-t-lg">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors first:rounded-t-lg">
               <span class="font-mono">JSON</span>
               <span class="text-gray-400 block text-xs">Readable format</span>
             </button>
             <button 
               @click="exportTimeline('ndjson')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors border-t border-gray-700">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors border-t border-gray-500/20">
               <span class="font-mono">NDJSON</span>
               <span class="text-gray-400 block text-xs">Line-delimited</span>
             </button>
             <button 
               @click="exportTimeline('csv')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors border-t border-gray-700">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors border-t border-gray-500/20">
               <span class="font-mono">CSV</span>
               <span class="text-gray-400 block text-xs">Excel/Sheets</span>
             </button>
             <button 
               @click="exportTimeline('md')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors border-t border-gray-700 last:rounded-b-lg">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors border-t border-gray-500/20 last:rounded-b-lg">
               <span class="font-mono">Markdown</span>
               <span class="text-gray-400 block text-xs">Documentation</span>
             </button>
           </div>
         </div>
-      </div>
-    </header>
+      </template>
+    </AppHeader>
+
+    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
 
     <section class="flex-1 flex flex-col overflow-hidden">
       <!-- Search bar -->

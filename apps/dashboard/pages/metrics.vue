@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
+import { useDaemonApi } from '~/composables/useDaemonApi';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -16,6 +17,9 @@ useHead({
     { name: 'description', content: 'Performance metrics and analytics for agent activities' }
   ]
 });
+
+// Watchdog timer for daemon API calls
+const { request, daemonError } = useDaemonApi();
 
 const { $ws } = useNuxtApp();
 const refreshing = ref(false);
@@ -177,9 +181,10 @@ const refresh = async () => {
   try {
     await Promise.all([
       (async () => {
-        const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline');
-        if (r?.events) {
-          events.value = r.events;
+        // Use watchdog timer
+        const result = await request<{events: any[]}>('/timeline');
+        if (result?.events) {
+          events.value = result.events;
           localStorage.setItem('timeline', JSON.stringify(events.value));
         }
       })(),
@@ -195,17 +200,14 @@ const refresh = async () => {
 onMounted(async () => {
   if (typeof window === 'undefined') return;
   
-  // Load events from API first
-  try {
-    const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline');
-    if (r?.events) {
-      events.value = r.events;
-      // Save to localStorage
-      localStorage.setItem('timeline', JSON.stringify(events.value));
-    }
-  } catch (e) {
-    console.error('Failed to load events:', e);
-    // Fallback to localStorage
+  // Load events from API first with watchdog timer
+  const result = await request<{events: any[]}>('/timeline');
+  if (result?.events) {
+    events.value = result.events;
+    // Save to localStorage
+    localStorage.setItem('timeline', JSON.stringify(events.value));
+  } else {
+    // Fallback to localStorage if daemon unreachable
     const stored = localStorage.getItem('timeline');
     if (stored) {
       try {
@@ -232,20 +234,8 @@ onMounted(async () => {
 
 <template>
   <div class="h-screen bg-black text-neutral-100 flex flex-col overflow-hidden">
-    <header class="p-4 py-2 border-b border-gray-500/20 flex items-center justify-between shrink-0">
-      <h1 class="text-lg space-x-2 flex items-center">
-        <div class="flex items-center gap-1">
-          <img src="~/assets/img/logo.png" alt="Echos" class="w-6 h-6" />
-          <span class="text-white font-medium text-base">Echos</span>
-        </div>
-        <span class="text-gray-500/40 text-sm">/</span>
-        <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/10 rounded-lg p-0.5 px-1">
-          <NuxtLink to="/" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Feed</NuxtLink>
-          <NuxtLink to="/timeline" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Timeline</NuxtLink>
-          <NuxtLink to="/metrics" class="text-white bg-gray-500/10 rounded-lg p-1 px-2 border border-gray-500/10">Metrics</NuxtLink>
-        </nav>
-      </h1>
-      <div class="flex items-center gap-2">
+    <AppHeader currentPage="metrics">
+      <template #actions>
         <!-- Time range selector -->
         <div class="relative">
           <select 
@@ -273,8 +263,10 @@ onMounted(async () => {
           @click="refresh">
           {{ refreshing ? 'Refreshing...' : 'Refresh' }}
         </button>
-      </div>
-    </header>
+      </template>
+    </AppHeader>
+
+    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
 
     <!-- Main content -->
     <main class="flex-1 overflow-y-auto p-6">

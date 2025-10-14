@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useDaemonApi } from '~/composables/useDaemonApi'
 
 definePageMeta({
   ssr: false
@@ -12,11 +13,13 @@ useHead({
   ]
 })
 
+// Watchdog timer for daemon API calls
+const { request, daemonError } = useDaemonApi()
+
 const feed = ref<any[]>([])
 const ask = ref<any|null>(null)
 const tokens = ref<any[]>([])
 const connected = ref(false)
-const daemonError = ref(false)
 const modalError = ref<string|null>(null)
 const modalLoading = ref(false)
 const timeoutId = ref<number|null>(null)
@@ -33,8 +36,10 @@ async function exportTimeline(format: 'ndjson' | 'json' | 'csv' | 'md') {
     exporting.value = true
     showExportMenu.value = false
     
-    const response = await fetch('http://127.0.0.1:3434/timeline')
-    const data = await response.json()
+    // Use watchdog timer with 10s timeout for larger exports
+    const data = await request<{events: any[]}>('/timeline', { timeout: 10000 })
+    if (!data) return // Request failed, error already handled
+    
     const events = data.events || []
     
     let content: string
@@ -105,16 +110,14 @@ async function exportTimeline(format: 'ndjson' | 'json' | 'csv' | 'md') {
     document.body.removeChild(a)
   } catch (error) {
     console.error('Failed to export timeline:', error)
+    // daemonError is automatically managed by useDaemonApi
   } finally {
     exporting.value = false
   }
 }
 
-// Get WebSocket only on client side
+// WebSocket reference - will be initialized in onMounted
 let $ws: any = null
-if (process.client) {
-  $ws = useNuxtApp().$ws
-}
 
 // Function to filter feed - safe for SSR
 function getFilteredFeed() {
@@ -165,9 +168,11 @@ if (process.client) {
 }
 
 onMounted(async () => {
-  // Ensure we have WebSocket access
-  if (!$ws) {
+  // Initialize WebSocket access from Nuxt app
+  try {
     $ws = useNuxtApp().$ws
+  } catch (e) {
+    console.warn('WebSocket plugin not available:', e)
   }
   
   // Restore sidebar state from localStorage
@@ -178,70 +183,72 @@ onMounted(async () => {
     }
   }
 
-  // Check connection state periodically and auto-refresh on reconnect
-  let previousState = $ws.readyState
-  const checkConnection = async () => {
-    const currentState = $ws.readyState
-    const isConnected = currentState === WebSocket.OPEN
-    const wasDisconnected = previousState !== WebSocket.OPEN
-    
-    if (connected.value !== isConnected) {
-      connected.value = isConnected
+  // Only set up WebSocket monitoring if available
+  if ($ws) {
+    // Check connection state periodically and auto-refresh on reconnect
+    let previousState = $ws?.readyState
+    const checkConnection = async () => {
+      if (!$ws) return // Guard against undefined WebSocket
       
-      if (isConnected && wasDisconnected && previousState !== null) {
-        // Reconnected - refresh data
-        try {
-          await refreshTokens()
-          const eventsRes = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
-          if (eventsRes?.events) {
-            feed.value = eventsRes.events.slice(0, 50)
+      const currentState = $ws.readyState
+      const isConnected = currentState === WebSocket.OPEN
+      const wasDisconnected = previousState !== WebSocket.OPEN
+      
+      if (connected.value !== isConnected) {
+        connected.value = isConnected
+        
+        if (isConnected && wasDisconnected && previousState !== null) {
+          // Reconnected - refresh data with watchdog timer
+          try {
+            await refreshTokens()
+            const eventsRes = await request<{events: any[]}>('/timeline')
+            if (eventsRes?.events) {
+              feed.value = eventsRes.events.slice(0, 50)
+            }
+          } catch (e) {
+            console.error('Failed to refresh data:', e)
           }
-        } catch (e) {
-          console.error('Failed to refresh data:', e)
         }
       }
+      
+      previousState = currentState
     }
     
-    previousState = currentState
+    // Check immediately and then every second
+    checkConnection()
+    const connectionInterval = setInterval(checkConnection, 1000)
+    
+    // Cleanup on unmount
+    onBeforeUnmount(() => {
+      clearInterval(connectionInterval)
+    })
+
+    // Set up WebSocket message listener
+    $ws.addEventListener("message", (e: MessageEvent) => {
+      const msg = JSON.parse(e.data)
+      feed.value.unshift(msg)
+      if (msg.type === "ask") { ask.value = msg.event; modalError.value = null }
+      if (msg.type === "token") refreshTokens()
+    })
   }
   
-  // Check immediately and then every second
-  checkConnection()
-  const connectionInterval = setInterval(checkConnection, 1000)
-  
-  // Cleanup on unmount
-  onBeforeUnmount(() => {
-    clearInterval(connectionInterval)
-  })
-
-  $ws.addEventListener("message", (e: MessageEvent) => {
-    const msg = JSON.parse(e.data)
-    feed.value.unshift(msg)
-    if (msg.type === "ask") { ask.value = msg.event; modalError.value = null }
-    if (msg.type === "token") refreshTokens()
-  })
-  
-  // Load initial tokens
+  // Load initial tokens with watchdog timer
   await refreshTokens()
   
-  // Fetch initial timeline/events if needed
-  try {
-    const eventsRes = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
-    if (eventsRes?.events) {
-      feed.value = eventsRes.events.slice(0, 50)
-    }
-  } catch(e) {
-    console.error('Failed to load timeline:', e)
+  // Fetch initial timeline/events with watchdog timer
+  const eventsRes = await request<{events: any[]}>('/timeline')
+  if (eventsRes?.events) {
+    feed.value = eventsRes.events.slice(0, 50)
   }
 })
 
 async function refreshTokens(){
-  try {
-    const r = await $fetch<{tokens: any[]}>('http://127.0.0.1:3434/tokens/list')
-    tokens.value = r?.tokens || []
-  } catch(e) {
-    console.error('Failed to load tokens:', e)
+  // Use watchdog timer (5s timeout)
+  const result = await request<{tokens: any[]}>('/tokens/list')
+  if (result) {
+    tokens.value = result.tokens || []
   }
+  // daemonError automatically managed
 }
 function humanIntent(e:any){
   if (e.intent==='calendar.read') return `read your calendar`
@@ -257,9 +264,18 @@ async function deny(){
   modalLoading.value = true
   modalError.value = null
   try {
-    await $fetch(`http://127.0.0.1:3434/decide/${ask.value.id}`, { method:"POST", body:{ status:"block" }})
-    if (timeoutId.value) clearTimeout(timeoutId.value)
-    ask.value=null 
+    // Use watchdog timer with 3s timeout for user actions
+    const result = await request(`/decide/${ask.value.id}`, { 
+      method: 'POST', 
+      body: { status: 'block' },
+      timeout: 3000
+    })
+    if (result) {
+      if (timeoutId.value) clearTimeout(timeoutId.value)
+      ask.value = null
+    } else {
+      modalError.value = "❌ Failed to send decision. Retry?"
+    }
   } catch(e) {
     modalError.value = "❌ Failed to send decision. Retry?"
   } finally {
@@ -272,9 +288,18 @@ async function allowOnce(){
   modalLoading.value = true
   modalError.value = null
   try {
-    await $fetch(`http://127.0.0.1:3434/decide/${ask.value.id}`, { method:"POST", body:{ status:"allow" }})
-    if (timeoutId.value) clearTimeout(timeoutId.value)
-    ask.value=null
+    // Use watchdog timer with 3s timeout for user actions
+    const result = await request(`/decide/${ask.value.id}`, { 
+      method: 'POST', 
+      body: { status: 'allow' },
+      timeout: 3000
+    })
+    if (result) {
+      if (timeoutId.value) clearTimeout(timeoutId.value)
+      ask.value = null
+    } else {
+      modalError.value = "❌ Failed to send decision. Retry?"
+    }
   } catch(e) {
     modalError.value = "❌ Failed to send decision. Retry?"
   } finally {
@@ -287,10 +312,19 @@ async function allowFor(durationSec:number, scopes:string[]){
   modalLoading.value = true
   modalError.value = null
   try {
-    await $fetch(`http://127.0.0.1:3434/decide/${ask.value.id}`, { method:"POST", body:{ status:"allow", agent: ask.value.agent, grant:{ scopes, durationSec, reason:"user approved" } }})
-    if (timeoutId.value) clearTimeout(timeoutId.value)
-    ask.value=null
-    await refreshTokens()
+    // Use watchdog timer with 3s timeout for user actions
+    const result = await request(`/decide/${ask.value.id}`, { 
+      method: 'POST', 
+      body: { status: 'allow', agent: ask.value.agent, grant: { scopes, durationSec, reason: 'user approved' } },
+      timeout: 3000
+    })
+    if (result) {
+      if (timeoutId.value) clearTimeout(timeoutId.value)
+      ask.value = null
+      await refreshTokens()
+    } else {
+      modalError.value = "❌ Failed to grant token. Retry?"
+    }
   } catch(e) {
     modalError.value = "❌ Failed to grant token. Retry?"
   } finally {
@@ -303,12 +337,12 @@ async function refresh() {
     // Add minimum delay to show "Refreshing..." feedback
     await Promise.all([
       (async () => {
-        // Reload feed data
-        const eventsRes = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
+        // Reload feed data with watchdog timer
+        const eventsRes = await request<{events: any[]}>('/timeline')
         if (eventsRes?.events) {
           feed.value = eventsRes.events.slice(0, 50)
         }
-        // Reload tokens
+        // Reload tokens (also with watchdog timer)
         await refreshTokens()
       })(),
       new Promise(resolve => setTimeout(resolve, 500))
@@ -328,28 +362,24 @@ function toggleEventDetails(index: number) {
   }
 }
 
-async function revoke(t:any){ await $fetch('http://127.0.0.1:3434/tokens/revoke', { method:"POST", body:{ token: t.token }}); await refreshTokens() }
-async function pause(t:any){ await $fetch('http://127.0.0.1:3434/tokens/pause',  { method:"POST", body:{ token: t.token }}); await refreshTokens() }
-async function resume(t:any){await $fetch('http://127.0.0.1:3434/tokens/resume', { method:"POST", body:{ token: t.token }}); await refreshTokens() }
+async function revoke(t:any){ 
+  await request('/tokens/revoke', { method: 'POST', body: { token: t.token }, timeout: 3000 })
+  await refreshTokens() 
+}
+async function pause(t:any){ 
+  await request('/tokens/pause', { method: 'POST', body: { token: t.token }, timeout: 3000 })
+  await refreshTokens() 
+}
+async function resume(t:any){
+  await request('/tokens/resume', { method: 'POST', body: { token: t.token }, timeout: 3000 })
+  await refreshTokens() 
+}
 </script>
 
 <template>
   <div class="h-screen bg-black flex flex-col overflow-hidden">
-    <header class="p-4 py-2 border-b border-gray-500/20 flex items-center justify-between shrink-0">
-      <h1 class="text-lg space-x-2 flex items-center">
-        <div class="flex items-center gap-1">
-          <img src="~/assets/img/logo.png" alt="Echos" class="w-6 h-6"></img>
-          <span class="text-white font-medium text-base">Echos</span>
-        </div>
-        <span class="text-gray-500/50 text-sm">/</span>
-        <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/15 rounded-lg p-0.5 px-1">
-          <NuxtLink to="/" class="text-white bg-gray-500/20 rounded-lg p-1 px-2 border border-gray-500/20">Feed</NuxtLink>
-          <NuxtLink to="/timeline" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Timeline</NuxtLink>
-          <NuxtLink to="/metrics" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Metrics</NuxtLink>
-        </nav>
-        <!-- <span class="text-gray-400 text-sm">Live Feed</span> -->
-      </h1>
-      <div class="flex items-center gap-3 text-xs">
+    <AppHeader currentPage="feed">
+      <template #actions>
         <button 
           :disabled="refreshing"
           class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
@@ -373,28 +403,28 @@ async function resume(t:any){await $fetch('http://127.0.0.1:3434/tokens/resume',
           </button>
           
           <!-- Dropdown menu -->
-          <div v-if="showExportMenu" class="absolute right-0 mt-1 w-40 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+          <div v-if="showExportMenu" class="absolute right-0 mt-1 w-40 bg-black border border-gray-500/20 rounded-lg shadow-xl z-50">
             <button 
               @click="exportTimeline('json')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors first:rounded-t-lg">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors first:rounded-t-lg">
               <span class="font-mono">JSON</span>
               <span class="text-gray-400 block text-xs">Readable format</span>
             </button>
             <button 
               @click="exportTimeline('ndjson')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors border-t border-gray-700">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors border-t border-gray-500/20">
               <span class="font-mono">NDJSON</span>
               <span class="text-gray-400 block text-xs">Line-delimited</span>
             </button>
             <button 
               @click="exportTimeline('csv')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors border-t border-gray-700">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors border-t border-gray-500/20">
               <span class="font-mono">CSV</span>
               <span class="text-gray-400 block text-xs">Excel/Sheets</span>
             </button>
             <button 
               @click="exportTimeline('md')"
-              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-700 transition-colors border-t border-gray-700 last:rounded-b-lg">
+              class="w-full px-4 py-2 text-left text-xs hover:bg-gray-500/10 transition-colors border-t border-gray-500/20 last:rounded-b-lg">
               <span class="font-mono">Markdown</span>
               <span class="text-gray-400 block text-xs">Documentation</span>
             </button>
@@ -405,8 +435,10 @@ async function resume(t:any){await $fetch('http://127.0.0.1:3434/tokens/resume',
         <span class="text-gray-400 text-xs">
           {{ connected ? 'Connected' : 'Disconnected' }}
         </span>
-      </div>
-    </header>
+      </template>
+    </AppHeader>
+
+    <DaemonErrorBanner :show="daemonError" :onRetry="refresh" />
 
     <section class="flex-1 flex overflow-hidden relative">
       <div class="flex-1 flex flex-col overflow-hidden">

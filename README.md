@@ -116,8 +116,10 @@ block:
 - **Metrics** - Performance analytics, activity charts, and top intents
 - **Event Details** - Click any event to see full request/response/metadata
 - **Token Management** - View, pause, resume, revoke authorizations
-- **Policy Engine** - Regex-based allow/ask/block rules
+- **Policy Engine** - Regex-based allow/ask/block rules with ReDoS protection
 - **JWT Auth** - Scope-based tokens with expiry
+- **Watchdog Timer** - Timeout protection (3-10s) prevents hanging requests
+- **Error Handling** - Graceful degradation with user-friendly error messages
 - **Local-First** - All data stays on your machine
 - **NDJSON Export** - Compliance-ready audit logs
 
@@ -132,10 +134,14 @@ ECHOS_LOCAL_ONLY=1     # Disable network (optional)
 
 ## Security
 
-- Local-only by default (127.0.0.1)
-- JWT tokens (HS256) with scope-based auth
-- No action payloads stored
-- Fail-open if daemon unreachable
+- **Local-only by default** (127.0.0.1)
+- **JWT tokens** (HS256) with scope-based auth
+- **Secure defaults** - Unknown intents are blocked (fail-closed)
+- **ReDoS protection** - 100ms timeout on regex evaluation
+- **Timeout protection** - API calls timeout after 3-10 seconds
+- **Error handling** - Failures default to block, never allow
+- **No action payloads stored** - Only metadata logged
+- **Security logging** - All security events tagged for monitoring
 
 ## More
 

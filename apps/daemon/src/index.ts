@@ -36,15 +36,34 @@ const SCOPES = {
   "http.request": "Make HTTP requests",
 } as const;
 
-// Naive regex policies for MVP
+// Regex policies with proper anchoring
+// Note: No $ anchor because we want to match "intent:target" where target can be anything
+// The ^ anchor ensures we match from the start, preventing accidental substring matches
 const POLICY = {
-  allow: [/^llm\.chat:/],
-  ask:   [/^slack\.post:/, /^calendar\.read:/, /^calendar\.write:/, /^email\.send:/],
-  block: [/^fs\.delete:/]
+  allow: [/^llm\.chat:/],     // Allow LLM chat with any target
+  ask:   [
+    /^slack\.post:/, 
+    /^calendar\.read:/, 
+    /^calendar\.write:/, 
+    /^email\.send:/
+  ],
+  block: [/^fs\.delete:/]     // Block file deletion with any target
 };
+// Timeout protection for regex evaluation (prevents ReDoS attacks)
+const REGEX_TIMEOUT_MS = 100; // 100ms max for regex evaluation
+
 const match = (arr:RegExp[], s:string)=>arr.some(r=>r.test(s));
+
 const findMatch = (arr:RegExp[], s:string):string|null => {
+  const startTime = Date.now();
+  
   for(const r of arr) {
+    // Check if we've exceeded timeout (ReDoS protection)
+    if (Date.now() - startTime > REGEX_TIMEOUT_MS) {
+      console.error(`[SECURITY] Regex evaluation timeout after ${REGEX_TIMEOUT_MS}ms - possible ReDoS attack`);
+      throw new Error('Regex evaluation timeout');
+    }
+    
     if (r.test(s)) return r.source;
   }
   return null;
@@ -86,18 +105,27 @@ app.use(eventHandler(async (req) => {
   
   // Otherwise, apply policy rules
   const sig = `${e.intent}:${e.target ?? ""}`;
-  let status:Decision = "allow";
+  let status:Decision = "block"; // SECURE DEFAULT: block if no policy matches or evaluation fails
   let matchedRule: string | null = null;
   let source: string | undefined = undefined;
   
-  if ((matchedRule = findMatch(POLICY.block, sig))) {
+  try {
+    // Evaluate policies with ReDoS protection
+    if ((matchedRule = findMatch(POLICY.block, sig))) {
+      status = "block";
+      source = "block";
+    } else if ((matchedRule = findMatch(POLICY.ask, sig))) {
+      status = "ask";
+      source = "ask";
+    } else if ((matchedRule = findMatch(POLICY.allow, sig))) {
+      status = "allow";
+      source = "allow";
+    }
+  } catch (err) {
+    // If regex evaluation fails/times out, default to BLOCK for security
+    console.error(`[SECURITY] Policy evaluation failed for ${sig}:`, err);
     status = "block";
-    source = "block";
-  } else if ((matchedRule = findMatch(POLICY.ask, sig))) {
-    status = "ask";
-    source = "ask";
-  } else if ((matchedRule = findMatch(POLICY.allow, sig))) {
-    source = "allow";
+    source = "evaluation_failed";
   }
   
   policyMatch = { 

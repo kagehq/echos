@@ -90,11 +90,14 @@ tsx your-agent.ts
 ## Dashboard
 
 - **Feed** (`/`) - Live stream with WebSocket, search, and refresh
-- **Timeline** (`/timeline`) - Historical audit log with search
+- **Timeline** (`/timeline`) - Historical audit log with search and filters
 - **Metrics** (`/metrics`) - Performance analytics, activity charts, and statistics
 - **Expandable Events** - Click any event to see request/response/metadata details
 - **Token Management** - Manage authorizations (pause/resume/revoke)
 - **Consent Modal** - Approve actions with "Deny", "Allow once", or "Allow 1h"
+- **Error Handling** - Connection status indicator with automatic retry
+- **Timeout Protection** - Requests timeout gracefully (no frozen UI)
+- **Export Options** - Download audit logs in JSON, NDJSON, CSV, or Markdown
 
 ## Available Scopes
 
