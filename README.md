@@ -1,6 +1,9 @@
 # Echos
 
-A Wireshark for AI agents. Visualize and control every action your agents take in real time.
+A firewall for AI agents to observe and control every action your agents take in real time.
+
+Unlike passive monitoring tools, Echos intercepts actions *before* they happen, giving you policy-based control and human approval for sensitive operations.
+
 
 ## Installation
 
@@ -136,7 +139,6 @@ ECHOS_LOCAL_ONLY=1     # Disable network (optional)
 
 ## More
 
-- **[npm package](https://www.npmjs.com/package/@echoshq/sdk)** - View on npm
 - **[QUICKSTART.md](./QUICKSTART.md)** - Detailed setup guide
 - **[examples/](./examples/)** - Usage examples
 

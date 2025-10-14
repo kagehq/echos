@@ -1,6 +1,9 @@
 # @echoshq/sdk
 
-SDK for Echos - A Wireshark for AI agents. Visualize and control every action your agents take in real time.
+SDK for Echos - A firewall for AI agents to observe and control every action your agents take in real time.
+
+Unlike passive monitoring tools, Echos intercepts actions *before* they happen, giving you policy-based control and human approval for sensitive operations.
+
 
 ## Installation
 
