@@ -9,6 +9,13 @@ export default defineNuxtConfig({
       autoprefixer: {},
     },
   },
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
+      ]
+    }
+  },
   runtimeConfig: {
     public: {
       daemonUrl: process.env.DAEMON_URL || 'http://127.0.0.1:3434'

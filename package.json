@@ -12,6 +12,7 @@
     "dev:daemon": "pnpm -C apps/daemon dev",
     "dev:dashboard": "pnpm -C apps/dashboard dev",
     "demo": "node packages/demo/dist/index.js",
+    "test": "node tests/comprehensive.test.mjs",
     "prep": "pnpm -r install && turbo prune --scope=@echos/demo --docker"
   },
   "devDependencies": {

@@ -38,29 +38,66 @@ async function run() {
 
   // demo agent
   console.log("🤖 Running demo agent actions...\n");
-  const ak = echos("demo_bot");
+  const agent = echos("demo_bot");
   
-  console.log("1. Emitting LLM chat (should be allowed)...");
-  await ak.emit("llm.chat", "openai.chat", { prompt:"hello" });
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("PHASE 1: Individual Actions (no token)");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   
-  console.log("2. Emitting Slack post (should ask for permission)...");
+  console.log("1️⃣  LLM chat → Should be ALLOWED by policy");
+  await agent.emit("llm.chat", "gpt-4", { prompt:"Analyze sales data" });
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  console.log("2️⃣  Slack post → Should ASK for permission");
+  console.log("   💡 Check dashboard - consent modal should appear!");
   try { 
-    await ak.emit("slack.post", "#sales", { text:"hi!" }); 
+    await agent.emit("slack.post", "#sales", { text:"Q4 results ready" }); 
+    console.log("   ✅ Action allowed");
   } catch (err) { 
-    console.log("   → Action was denied or timed out");
+    console.log("   ❌ Action denied or timed out");
   }
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 1500));
   
-  console.log("3. Emitting file delete (should be blocked)...");
+  console.log("3️⃣  File delete → Should be BLOCKED by policy");
   try { 
-    await ak.emit("fs.delete", "/var/data"); 
+    await agent.emit("fs.delete", "/tmp/cache.db"); 
   } catch (err) { 
-    console.log("   → Action was blocked by policy");
+    console.log("   ❌ Action blocked by policy (expected)");
+  }
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("PHASE 2: Token-Based Authorization");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  
+  console.log("4️⃣  First calendar access → will ASK for permission");
+  console.log("   💡 In the dashboard, click 'Allow 1h' to grant a token!");
+  try {
+    await agent.emit("calendar.read", "team-calendar");
+    console.log("   ✅ First action approved!");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // If we got here, the user granted a token via "Allow 1h"
+    console.log("5️⃣  Second calendar access → using the token");
+    await agent.emit("calendar.write", "team-calendar", { title: "Q4 Planning" });
+    console.log("   ✅ No consent needed - token was used!");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log("6️⃣  Third calendar access → still using the same token");
+    await agent.emit("calendar.read", "shared-calendar");
+    console.log("   ✅ All subsequent actions use the same token!");
+  } catch (err) {
+    console.log("   ❌ Action was denied");
   }
   
-  console.log("\n✅ Demo complete! Check the dashboard for live events.");
-  console.log("Press Ctrl+C to stop all services.");
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("✅ Demo complete!");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("\n📊 Check the dashboard:");
+  console.log("   • Feed: See all events in real-time");
+  console.log("   • Timeline: Review historical actions");
+  console.log("   • Tokens: Manage active authorizations");
+  console.log("\n⌨️  Press Ctrl+C to stop all services.\n");
 
   process.on("SIGINT", () => { 
     daemon.kill("SIGINT"); 

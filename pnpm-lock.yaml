@@ -17,9 +17,15 @@ importers:
       h3:
         specifier: ^1.11.1
         version: 1.15.4
+      jose:
+        specifier: ^6.1.0
+        version: 6.1.0
       listhen:
         specifier: ^1.8.1
         version: 1.9.0
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
@@ -51,6 +57,9 @@ importers:
       '@nuxt/ui':
         specifier: ^2.15.2
         version: 2.22.3(magicast@0.3.5)(tsx@4.20.6)(vite@6.3.6(@types/node@20.19.21)(jiti@2.6.1)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))(vue@3.5.22(typescript@5.9.3))(yaml@2.8.1)
+      date-fns:
+        specifier: ^4.1.0
+        version: 4.1.0
       nuxt:
         specifier: ^3.17.0
         version: 3.17.0(@parcel/watcher@2.5.1)(@types/node@20.19.21)(db0@0.3.4)(ioredis@5.8.1)(magicast@0.3.5)(rollup@4.52.4)(terser@5.44.0)(tsx@4.20.6)(typescript@5.9.3)(vite@6.3.6(@types/node@20.19.21)(jiti@2.6.1)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1))(yaml@2.8.1)
@@ -1568,6 +1577,9 @@ packages:
     resolution: {integrity: sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A==}
     engines: {node: '>= 12'}
 
+  date-fns@4.1.0:
+    resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
+
   db0@0.3.4:
     resolution: {integrity: sha512-RiXXi4WaNzPTHEOu8UPQKMooIbqOEyqA1t7Z6MsdxSCeb8iUC9ko3LcmsLmeUt2SM5bctfArZKkRQggKZz7JNw==}
     peerDependencies:
@@ -2193,6 +2205,9 @@ packages:
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
+
+  jose@6.1.0:
+    resolution: {integrity: sha512-TTQJyoEoKcC1lscpVDCSsVgYzUDg/0Bt3WE//WiTPK6uOCQC2KZS4MpugbMWt/zyjkopgZoXhZuCi00gLudfUA==}
 
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
@@ -5485,6 +5500,8 @@ snapshots:
 
   data-uri-to-buffer@4.0.1: {}
 
+  date-fns@4.1.0: {}
+
   db0@0.3.4: {}
 
   debug@3.2.7:
@@ -6088,6 +6105,8 @@ snapshots:
   jiti@1.21.7: {}
 
   jiti@2.6.1: {}
+
+  jose@6.1.0: {}
 
   joycon@3.1.1: {}
 

@@ -1,64 +1,54 @@
-import { createApp, eventHandler, toNodeListener, readBody, setResponseHeader, getRouterParam } from "h3";
+import { createApp, eventHandler, readBody, toNodeListener, setResponseHeader } from "h3";
 import { listen } from "listhen";
 import { WebSocketServer } from "ws";
-import { promises as fs } from "node:fs";
-import { join } from "pathe";
-import YAML from "yaml";
-import fetch from "node-fetch";
+import { createSecretKey, randomBytes } from "node:crypto";
+import * as jose from "jose";
 
-type DecisionStatus = "allow" | "block" | "ask";
-const PENDING = new Map<string, (d: any)=>void>();
-const CLIENTS = new Set<any>();
-const EVENTS: any[] = [];
-const MAX_EVENTS = 200;
-
-interface Policy { allow?: string[]; block?: string[]; ask?: string[]; slackWebhook?: string; }
-function match(list: string[]|undefined, s: string) { return !!list?.some(p => new RegExp(p.replaceAll("*",".*")).test(s)); }
-
-async function ensurePolicyFile(): Promise<string> {
-  const homeDir = process.env.HOME ?? ".";
-  const echosDir = join(homeDir, ".echos");
-  const policyPath = join(echosDir, "echos.yaml");
-  
-  try {
-    await fs.access(policyPath);
-  } catch {
-    // File doesn't exist, create it with defaults
-    const defaultPolicy = `allow:
-  - "llm.chat:.*"
-ask:
-  - "slack.post:.*"
-block:
-  - "fs\\\\.delete:.*"
-# slackWebhook: "https://hooks.slack.com/services/XXX"
-`;
-    try {
-      await fs.mkdir(echosDir, { recursive: true });
-      await fs.writeFile(policyPath, defaultPolicy, "utf8");
-      console.log(`Created default policy at ${policyPath}`);
-    } catch (err) {
-      console.error("Failed to create policy file:", err);
-    }
-  }
-  
-  return policyPath;
-}
-
-async function loadPolicy(): Promise<Policy> {
-  const path = await ensurePolicyFile();
-  try {
-    const content = await fs.readFile(path, "utf8");
-    return YAML.parse(content) as Policy;
-  } catch {
-    return { allow:[".*llm.*"], ask:[".*slack.*"], block:[".*fs\\.delete.*"] };
-  }
-}
+type Decision = "allow"|"block"|"ask";
+type TokenRecord = { token:string; agent:string; scopes:string[]; expiresAt:number; status:"active"|"paused"|"revoked" };
+type EventMsg = { id:string; ts:number; agent:string; intent:string; target?:string; meta?:any; preview?:string; tokenAttached?:boolean; request?:any; response?:any; metadata?:any };
+type TimelineEntry = EventMsg | { type: string; ts: number; action?: string; token?: string; [key: string]: any };
 
 const app = createApp();
+const wss = new WebSocketServer({ noServer:true });
+const clients = new Set<any>();
+const PENDING = new Map<string,(d:any)=>void>();
+const TOKENS = new Map<string, TokenRecord>();
+const TIMELINE: TimelineEntry[] = [];
 
-// CORS for dashboard (http://localhost:3000)
+const SECRET_KEY = createSecretKey(process.env.ECHOS_SECRET ? Buffer.from(process.env.ECHOS_SECRET,"utf8") : randomBytes(32));
+const now = ()=>Date.now();
+const broadcast = (msg:any)=>{ const s=JSON.stringify(msg); for(const c of clients){ try{ c.send(s);}catch{} } };
+
+// Official scope taxonomy
+const SCOPES = {
+  "llm.chat": "Chat with LLM services",
+  "email.send": "Send emails",
+  "email.read": "Read emails",
+  "calendar.read": "Read calendar events",
+  "calendar.write": "Create/modify calendar events",
+  "slack.post": "Post to Slack channels",
+  "slack.read": "Read Slack messages",
+  "fs.read": "Read files",
+  "fs.write": "Write files",
+  "fs.delete": "Delete files",
+  "http.request": "Make HTTP requests",
+} as const;
+
+// Naive regex policies for MVP
+const POLICY = {
+  allow: [/^llm\.chat:/],
+  ask:   [/^slack\.post:/, /^calendar\.read:/, /^calendar\.write:/, /^email\.send:/],
+  block: [/^fs\.delete:/]
+};
+const match = (arr:RegExp[], s:string)=>arr.some(r=>r.test(s));
+
+// ENV config (read early for CORS)
+const CORS_ORIGIN = process.env.ECHOS_CORS_ORIGIN || "*";
+
+// CORS middleware
 app.use(eventHandler((req) => {
-  setResponseHeader(req, "Access-Control-Allow-Origin", "*");
+  setResponseHeader(req, "Access-Control-Allow-Origin", CORS_ORIGIN);
   setResponseHeader(req, "Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   setResponseHeader(req, "Access-Control-Allow-Headers", "content-type");
   if (req.method === "OPTIONS") {
@@ -66,84 +56,137 @@ app.use(eventHandler((req) => {
   }
 }));
 
+// --- Decide: allow|block|ask ---
 app.use(eventHandler(async (req) => {
-  // Handle POST /decide (policy check) - must NOT match /decide/:id
   if (req.path !== '/decide' || req.method !== 'POST') return;
   
-  const body = await readBody<any>(req);
-  const p = await loadPolicy();
-  const sig = `${body.intent}:${body.target ?? ""}`;
-  let status: DecisionStatus = "allow";
-  if (match(p.block, sig)) status="block";
-  else if (match(p.ask, sig)) status="ask";
-  else if (match(p.allow, sig)) status="allow";
-
-  if (status==="ask") {
-    await broadcast({ type:"ask", event: body });
+  const body = await readBody<EventMsg & { token?: string }>(req);
+  const { token, ...e } = body;
+  
+  // Check if a valid token exists that covers this intent
+  if (token) {
+    const tokenRec = TOKENS.get(token);
+    if (tokenRec && tokenRec.status === "active" && now() < tokenRec.expiresAt) {
+      // Check if token scopes cover this intent
+      if (tokenRec.scopes.includes(e.intent)) {
+        return { status: "allow" as Decision, id: e.id };
+      }
+    }
   }
-  return { status, id: body.id };
+  
+  // Otherwise, apply policy rules
+  const sig = `${e.intent}:${e.target ?? ""}`;
+  let status:Decision = "allow";
+  if (match(POLICY.block, sig)) status = "block";
+  else if (match(POLICY.ask, sig)) status = "ask";
+  if (status === "ask") {
+    const msg = { type:"ask", event:e, ts: now() };
+    TIMELINE.unshift(msg);
+    await broadcast(msg);
+  }
+  return { status, id: e.id };
 }));
 
-app.use("/events/recent", eventHandler(async () => {
-  return { events: EVENTS };
-}));
-
-app.use("/events", eventHandler(async (req) => {
-  const body = await readBody<any>(req);
-  EVENTS.unshift(body);
-  if (EVENTS.length > MAX_EVENTS) EVENTS.length = MAX_EVENTS;
-  await broadcast({ type:"event", event: body });
-  return { ok: true };
-}));
-
+// Long-poll wait for human decision (from dashboard)
 app.use(eventHandler(async (req) => {
   const match = req.path?.match(/^\/await\/(.+)$/);
   if (!match) return;
   
   const id = match[1];
-  const result = await new Promise((resolve) => {
-    PENDING.set(id, resolve);
-    setTimeout(() => { 
-      if (PENDING.has(id)) { 
-        PENDING.delete(id); 
-        resolve({ id, status:"block" }); 
-      } 
-    }, 1000*60*2);
-  });
+  const result = await new Promise((resolve)=>{ PENDING.set(id, resolve); setTimeout(()=>{ if(PENDING.has(id)){ PENDING.delete(id); resolve({ status:"block" }); } }, 120000); });
   return result;
 }));
 
-app.use(eventHandler(async (req) => {
-  const match = (req.path || req.url)?.match(/^\/decide\/(.+)$/);
+// Human decision → optional token issuance via grant
+app.use(eventHandler(async (req)=>{
+  const match = req.path?.match(/^\/decide\/(.+)$/);
   if (!match) return;
   
   const id = match[1];
-  if (req.method !== 'POST') return;
-  
-  const body = await readBody<any>(req);
-  const fn = PENDING.get(id);
-  if (fn) { 
-    fn({ id, status: body.status }); 
-    PENDING.delete(id); 
+  const body = await readBody<{ status:"allow"|"block"; agent?:string; grant?:{ scopes:string[]; durationSec:number; reason?:string } }>(req);
+  let payload:any = { status: body.status };
+  if (body.status==="allow" && body.grant?.scopes?.length && body.grant.durationSec>0){
+    const agent = body.agent ?? "default";
+    const expAt = now() + body.grant.durationSec*1000;
+    const jwt = await new jose.SignJWT({ agent, scopes: body.grant.scopes, exp: Math.floor(expAt/1000) })
+      .setProtectedHeader({ alg:"HS256" })
+      .sign(SECRET_KEY);
+    const rec: TokenRecord = { token: jwt, agent, scopes: body.grant.scopes, expiresAt: expAt, status:"active" };
+    TOKENS.set(jwt, rec);
+    payload = { status:"allow", token: rec };
   }
-  await broadcast({ type:"decision", id, status: body.status, ts: Date.now() });
+  const fn = PENDING.get(id); if (fn){ fn(payload); PENDING.delete(id); }
+  const msg = { type:"decision", id, payload, ts: now() };
+  TIMELINE.unshift(msg);
+  await broadcast(msg);
   return { ok:true };
 }));
 
+// Tokens lifecycle
+app.use("/tokens/issue", eventHandler(async (req)=>{
+  const b = await readBody<{agent:string; scopes:string[]; durationSec:number; reason?:string}>(req);
+  const expAt = now() + Math.max(60, b.durationSec||0)*1000;
+  const jwt = await new jose.SignJWT({ agent: b.agent, scopes: b.scopes, exp: Math.floor(expAt/1000) }).setProtectedHeader({ alg:"HS256" }).sign(SECRET_KEY);
+  const rec: TokenRecord = { token: jwt, agent: b.agent, scopes: b.scopes, expiresAt: expAt, status:"active" };
+  TOKENS.set(jwt, rec);
+  const msg = { type:"token", action:"issued", token: jwt, ts: now() };
+  TIMELINE.unshift(msg);
+  await broadcast(msg);
+  return { token: rec };
+}));
+app.use("/tokens/revoke", eventHandler(async (req)=>{ const { token } = await readBody<{token:string}>(req); const t=TOKENS.get(token); if(t){ t.status="revoked"; TOKENS.set(token,t); const msg = { type:"token", action:"revoked", token, ts: now() }; TIMELINE.unshift(msg); await broadcast(msg); } return { ok:true }; }));
+app.use("/tokens/pause",  eventHandler(async (req)=>{ const { token } = await readBody<{token:string}>(req); const t=TOKENS.get(token); if(t){ t.status="paused";  TOKENS.set(token,t); const msg = { type:"token", action:"paused", token, ts: now() }; TIMELINE.unshift(msg); await broadcast(msg);  } return { ok:true }; }));
+app.use("/tokens/resume", eventHandler(async (req)=>{ const { token } = await readBody<{token:string}>(req); const t=TOKENS.get(token); if(t){ t.status="active";  TOKENS.set(token,t); const msg = { type:"token", action:"active", token, ts: now() }; TIMELINE.unshift(msg); await broadcast(msg); } return { ok:true }; }));
+app.use("/tokens/list", eventHandler(async ()=>({ tokens: Array.from(TOKENS.values()) })));
+
+// Token introspection (validate + get details)
+app.use("/tokens/introspect", eventHandler(async (req)=>{
+  const { token } = await readBody<{token:string}>(req);
+  const rec = TOKENS.get(token);
+  if (!rec) return { active: false };
+  const expired = now() >= rec.expiresAt;
+  const active = rec.status === "active" && !expired;
+  return { active, agent: rec.agent, scopes: rec.scopes, exp: Math.floor(rec.expiresAt/1000), status: rec.status };
+}));
+
+// List available scopes
+app.use("/scopes", eventHandler(async ()=>({ scopes: SCOPES })));
+
+// Events & timeline
+app.use("/events", eventHandler(async (req)=>{ 
+  if (req.method !== 'POST') return;
+  const e = await readBody<EventMsg>(req); 
+  const msg = { type:"event", event:e, ts: e.ts };
+  TIMELINE.unshift(msg); 
+  await broadcast(msg); 
+  return { ok:true };
+}));
+
+// Audit export (NDJSON format for enterprise) - must come BEFORE /timeline
+app.use("/timeline.ndjson", eventHandler((req)=>{
+  const ndjson = TIMELINE.map(e => JSON.stringify(e)).join('\n');
+  setResponseHeader(req, "Content-Type", "application/x-ndjson");
+  setResponseHeader(req, "Content-Disposition", `attachment; filename="echos-timeline-${now()}.ndjson"`);
+  return ndjson + '\n';
+}));
+
+app.use("/timeline", eventHandler(async (req)=>{
+  // Avoid matching .ndjson (already handled above)
+  if (req.path?.includes('.ndjson')) return;
+  return { events: TIMELINE.slice(0,1000) };
+}));
+app.use("/timeline/replay", eventHandler(async (req)=>{ const { fromTs, toTs } = await readBody<{fromTs?:number; toTs?:number}>(req); const s=fromTs??0, t=toTs??now(); const slice = TIMELINE.filter(e=>e.ts>=s && e.ts<=t).sort((a,b)=>a.ts-b.ts); return { events:slice }; }));
+
+// ENV config (continued)
+const PORT = parseInt(process.env.ECHOS_PORT || "3434");
+const HOST = process.env.ECHOS_HOST || "127.0.0.1";
+const LOCAL_ONLY = process.env.ECHOS_LOCAL_ONLY === "1";
+
+// Boot HTTP + WS
 const server = toNodeListener(app);
-const wss = new WebSocketServer({ noServer: true });
-async function broadcast(msg:any){ const s = JSON.stringify(msg); for (const ws of CLIENTS) { try{ ws.send(s);}catch{} } }
-
-const http = await listen(server, { port: 3434, hostname: "127.0.0.1", name: "echosd" });
-http.server.on("upgrade", (req, socket, head) => {
-  if (req.url === "/ws") {
-    wss.handleUpgrade(req, socket, head, (ws) => { 
-      CLIENTS.add(ws); 
-      ws.on("close", () => CLIENTS.delete(ws));
-    });
-  } else {
-    socket.destroy();
-  }
+const http = await listen(server, { port: PORT, hostname: HOST, name:"echosd" });
+http.server.on("upgrade", (req, socket, head)=> {
+  if (req.url==="/ws") wss.handleUpgrade(req, socket, head, (ws)=>{ clients.add(ws); ws.on("close",()=>clients.delete(ws)); });
+  else socket.destroy();
 });
-console.log("echosd listening on http://127.0.0.1:3434");
-
+console.log(`🟢 echosd @ http://${HOST}:${PORT}${LOCAL_ONLY ? ' (local-only)' : ''}`);

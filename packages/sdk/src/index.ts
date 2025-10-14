@@ -1,63 +1,63 @@
 import { request } from "undici";
 import { nanoid } from "nanoid";
-import type { ActionEvent, Decision } from "./types.js";
 
 const ENDPOINT = process.env.ECHOS_ENDPOINT ?? "http://127.0.0.1:3434";
+type Decision = "allow"|"block"|"ask";
+export type EchosToken = { token:string; expiresAt:number; scopes:string[]; status:"active"|"paused"|"revoked" };
 
-async function postJSON(path: string, body: any) {
-  try {
-    await request(`${ENDPOINT}${path}`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "content-type": "application/json" }
-    });
-  } catch {}
-}
+async function postJSON<T=any>(path:string, body:any){ try{
+  const res = await request(`${ENDPOINT}${path}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+  return await res.body.json() as T;
+}catch{ return undefined as any; } }
 
 export class EchosClient {
-  agent: string;
-  constructor(agent: string) { this.agent = agent; }
+  constructor(public agent="default"){}
+  private token: EchosToken | null = null;
+  setToken(t:EchosToken|null){ this.token = t; }
+  authHeader(){ return (this.token && this.token.status==="active" && Date.now()<this.token.expiresAt) ? {"x-echos-token": this.token.token } : {}; }
 
-  async emit(intent: ActionEvent["intent"], target?: string, meta?: any) {
-    const evt: ActionEvent = {
-      id: nanoid(),
-      ts: Date.now(),
-      agent: this.agent,
-      intent, target, meta,
-      preview: `${intent} → ${target ?? ""}`.trim()
-    };
-    // Ask daemon for policy decision:
-    const res = await request(`${ENDPOINT}/decide`, {
-      method: "POST",
-      body: JSON.stringify(evt),
-      headers: { "content-type": "application/json" }
-    }).catch(() => null);
+  // Sugar: agent.authorize({ scopes, durationSec, reason })
+  async authorize(opts: { scopes: string[], durationSec: number, reason: string }){
+    const data = await postJSON<{token:EchosToken}>("/tokens/issue", { agent:this.agent, ...opts });
+    if (data?.token) this.token = data.token;
+    return data?.token ?? null;
+  }
 
-    const decision = res ? await res.body.json() as { status: "allow" | "block" | "ask" } : { status: "allow" };
+  async requestConsent(scopes:string[], durationSec:number, reason:string){
+    const data = await postJSON<{token:EchosToken}>("/tokens/issue", { agent:this.agent, scopes, durationSec, reason });
+    if (data?.token) this.token = data.token;
+    return data?.token ?? null;
+  }
 
-    if (decision.status === "ask") {
-      // wait for user decision
-      const wait = await request(`${ENDPOINT}/await/${evt.id}`).then(r => r.body.json() as Promise<Decision>).catch(() => ({ status: "block" }));
-      if (wait.status !== "allow") throw new Error("Echos: action denied");
-    } else if (decision.status === "block") {
-      throw new Error("Echos: action blocked by policy");
+  async emit(intent:string, target?:string, meta?:any, request?:any, response?:any, metadata?:any){
+    const evt = { id:nanoid(), ts:Date.now(), agent:this.agent, intent, target, meta, preview:`${intent} → ${target??""}`.trim(), request, response, metadata };
+    
+    // Include token in decision request if we have one
+    const decidePayload:any = { ...evt };
+    if (this.token && this.token.status==="active" && Date.now()<this.token.expiresAt) {
+      decidePayload.token = this.token.token;
     }
+    
+    const decision = await postJSON<{status:Decision, id:string}>("/decide", decidePayload) ?? { status:"allow" as Decision, id:evt.id };
 
-    await postJSON("/events", evt);
+    if (decision.status === "ask"){
+      const wait = await postJSON<{status:"allow"|"block", token?:EchosToken}>(`/await/${evt.id}`, {});
+      if (!wait || wait.status!=="allow") throw new Error("Echos: action denied");
+      if (wait.token) this.token = wait.token;
+    }
+    if (decision.status === "block") throw new Error("Echos: action blocked");
+
+    await postJSON("/events", { ...evt, tokenAttached: !!this.token });
     return evt;
   }
 
-  // Convenience wrappers
-  async fetch(input: string, init?: { method?: string; [key: string]: any }) {
-    await this.emit("http.request", input, { method: init?.method ?? "GET" });
-    // Note: fetch is not available in Node by default, use undici or node-fetch
+  async fetch(input:any, init?:any){
+    const url = typeof input==="string" ? input : input?.toString?.() ?? "";
+    await this.emit("http.request", url, { method: init?.method ?? "GET" });
+    const headers = { ...(init?.headers||{}), ...this.authHeader() };
     return { ok: true, status: 200 }; // Stub for now
   }
 }
 
-export function echos(agentName = "default") {
-  return new EchosClient(agentName);
-}
-
+export function echos(name?:string){ return new EchosClient(name); }
 export * from "./types.js";
-

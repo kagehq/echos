@@ -1,0 +1,302 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
+definePageMeta({
+  ssr: false
+})
+
+useHead({
+  title: 'Timeline - Echos',
+  meta: [
+    { name: 'description', content: 'Historical timeline of agent events and activities' }
+  ]
+})
+
+const events = ref<any[]>([])
+const connected = ref(false)
+const loading = ref(false)
+const filterText = ref('')
+const refreshing = ref(false)
+const searchQuery = ref('')
+const expandedEvents = ref<Set<number>>(new Set())
+
+// Function to filter events - safe for SSR
+function getFilteredEvents() {
+  // Guard against SSR
+  if (typeof window === 'undefined') return []
+  if (!events.value) return []
+  if (!searchQuery.value) return events.value
+  
+  const query = searchQuery.value.toLowerCase()
+  return events.value.filter((m: any) => {
+    try {
+      const searchableText = [
+        m?.type,
+        m?.event?.intent,
+        m?.event?.target,
+        m?.event?.agent,
+        m?.payload?.status,
+        m?.action,
+        m?.event?.request ? JSON.stringify(m.event.request) : '',
+        m?.event?.response ? JSON.stringify(m.event.response) : ''
+      ].filter(v => v).join(' ').toLowerCase()
+      
+      return searchableText.includes(query)
+    } catch (e) {
+      return false
+    }
+  })
+}
+
+onMounted(async ()=>{ 
+  const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
+  events.value = r?.events || []
+})
+
+async function replayLast5m(){
+  loading.value = true
+  filterText.value = 'Filtering last 5 minutes...'
+  const end = Date.now(), start = end - 5*60*1000
+  const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline/replay', { method:"POST", body:{ fromTs:start, toTs:end } })
+  events.value = r?.events || []
+  filterText.value = `Showing ${events.value.length} events from last 5 min`
+  loading.value = false
+  setTimeout(() => { filterText.value = '' }, 3000)
+}
+
+async function showAll(){
+  loading.value = true
+  filterText.value = 'Loading all events...'
+  const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
+  events.value = r?.events || []
+  filterText.value = `Showing all ${events.value.length} events`
+  loading.value = false
+  setTimeout(() => { filterText.value = '' }, 3000)
+}
+
+async function refresh(){
+  refreshing.value = true
+  try {
+    // Add minimum delay to show "Refreshing..." feedback
+    await Promise.all([
+      (async () => {
+        const r = await $fetch<{events: any[]}>('http://127.0.0.1:3434/timeline')
+        events.value = r?.events || []
+      })(),
+      new Promise(resolve => setTimeout(resolve, 500))
+    ])
+  } catch(e) {
+    console.error('Failed to refresh:', e)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+function toggleEventDetails(index: number) {
+  if (expandedEvents.value.has(index)) {
+    expandedEvents.value.delete(index)
+  } else {
+    expandedEvents.value.add(index)
+  }
+}
+</script>
+
+<template>
+  <div class="h-screen bg-black text-neutral-100 flex flex-col overflow-hidden">
+    <header class="p-4 py-2 border-b border-gray-500/20 flex items-center justify-between shrink-0">
+      <h1 class="text-lg space-x-2 flex items-center">
+        <div class="flex items-center gap-1">
+          <img src="~/assets/img/logo.png" alt="Echos" class="w-6 h-6"></img>
+          <span class="text-white font-medium text-base">Echos</span>
+        </div>
+        <span class="text-gray-500/40 text-sm">/</span>
+        <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/10 rounded-lg p-0.5 px-1">
+          <NuxtLink to="/" class="text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2">Feed</NuxtLink>
+          <NuxtLink to="/timeline" class="text-white bg-gray-500/10 rounded-lg p-1 px-2 border border-gray-500/10">Timeline</NuxtLink>
+        </nav>
+      </h1>
+      <div class="flex items-center gap-2">
+        <span v-if="filterText" class="text-xs text-gray-400 mr-2">{{ filterText }}</span>
+        <button 
+          :disabled="refreshing"
+          class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
+          @click="refresh">
+          {{ refreshing ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <span class="text-gray-500/50">|</span>
+        <button 
+          :disabled="loading"
+          class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50" 
+          @click="replayLast5m">
+          {{ loading ? 'Loading...' : 'Last 5 min' }}
+        </button>
+        <button 
+          :disabled="loading"
+          class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50" 
+          @click="showAll">
+          {{ loading ? 'Loading...' : 'Show All' }}
+        </button>
+      </div>
+    </header>
+
+    <section class="flex-1 flex flex-col overflow-hidden">
+      <!-- Search bar -->
+      <div class="">
+        <div class="relative">
+          <input 
+            v-model="searchQuery"
+            type="text" 
+            placeholder="Search agent, intent, target, request, response..."
+            class="w-full bg-gray-500/5 border border-gray-500/20 border-l-0 border-r-0 border-t-0 rounded-none px-4 py-3.5 pl-10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-gray-500/20 focus:bg-gray-500/10"
+          />
+          <svg class="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+            <span v-if="searchQuery" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+            {{ getFilteredEvents().length }} result{{ getFilteredEvents().length !== 1 ? 's' : '' }}
+          </span>
+        </div>
+      </div>
+
+      <div class="flex-1 space-y-0.5 py-2 px-4 overflow-y-auto">
+        <div v-if="!getFilteredEvents().length" class="text-center text-gray-500 py-8">
+          {{ searchQuery ? 'No matching events found' : 'No events found. Try running an agent or adjust the time filter.' }}
+        </div>
+        <div class="space-y-0.5">
+          <div v-for="(m,i) in getFilteredEvents()" :key="i"
+            :class="[
+              'rounded-lg transition-colors',
+              expandedEvents.has(i) 
+                ? 'border border-gray-500/20 bg-gray-500/10' 
+                : 'border border-transparent hover:border-gray-500/20 hover:bg-gray-500/5'
+            ]">
+            <!-- Main row -->
+            <div 
+              class="flex items-center gap-8 py-1.5 px-2 hover:bg-gray-500/5 rounded-lg font-mono text-sm cursor-pointer"
+              @click="toggleEventDetails(i)"
+            >
+              <!-- Time -->
+              <div v-if="m.type==='event'" class="text-xs opacity-40 w-16 shrink-0 text-right">{{ new Date(m.event?.ts || m.ts).toLocaleTimeString('en-US', { hour12: false }).slice(0, 8) }}</div>
+              <div v-else class="text-xs opacity-40 w-16 shrink-0 text-right">{{ new Date(m.ts || Date.now()).toLocaleTimeString('en-US', { hour12: false }).slice(0, 8) }}</div>
+              
+              <!-- Status Code -->
+              <div v-if="m.type==='event'" class="w-12 shrink-0 text-green-300">200</div>
+              <div v-else-if="m.type==='ask'" class="w-12 shrink-0 text-amber-300">ASK</div>
+              <div v-else-if="m.type==='decision'" :class="m.payload?.status==='allow' ? 'text-green-300' : 'text-red-400'" class="w-12 shrink-0">{{ m.payload?.status==='allow' ? '200' : '403' }}</div>
+              <div v-else-if="m.type==='token'" class="w-12 shrink-0 text-blue-300">TOK</div>
+              <div v-else class="w-12 shrink-0 text-gray-400">---</div>
+              
+              <!-- Method/Type -->
+              <div v-if="m.type==='event'" class="w-20 shrink-0 text-white">{{ m.event?.intent?.split('.')[0]?.toUpperCase() || 'EVENT' }}</div>
+              <div v-else-if="m.type==='ask'" class="w-20 shrink-0 text-white">ASK</div>
+              <div v-else-if="m.type==='decision'" class="w-20 shrink-0 text-white">DECIDE</div>
+              <div v-else-if="m.type==='token'" class="w-20 shrink-0 text-white">{{ m.action?.toUpperCase() || 'TOKEN' }}</div>
+              <div v-else class="w-20 shrink-0 text-white">UNKNOWN</div>
+              
+              <!-- Path/Target -->
+              <div v-if="m.type==='event'" class="flex-1 text-gray-400">{{ m.event?.target || m.event?.intent || '—' }}</div>
+              <div v-else-if="m.type==='ask'" class="flex-1 text-gray-400">{{ m.event?.target || m.event?.intent || '—' }}</div>
+              <div v-else-if="m.type==='decision'" class="flex-1">
+                <span :class="m.payload?.status === 'allow' ? 'text-green-300' : 'text-red-400'">
+                  {{ m.payload?.status === 'allow' ? '✓ Allowed' : '✗ Denied' }}
+                </span>
+                <span v-if="m.payload?.token" class="text-gray-400 ml-2">- token granted</span>
+              </div>
+              <div v-else-if="m.type==='token'" class="flex-1 text-gray-400">{{ m.token?.slice(0, 40) }}...</div>
+              <div v-else class="flex-1 text-gray-400">{{ JSON.stringify(m).slice(0, 60) }}...</div>
+              
+              <!-- Expand indicator -->
+              <div class="w-4 shrink-0 text-gray-500">
+                <svg v-if="expandedEvents.has(i)" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+
+            <!-- Expanded details -->
+            <div v-if="expandedEvents.has(i)" class="px-4 py-3 border-t border-gray-500/10 bg-gray-500/5">
+              <div class="space-y-3 text-xs">
+                <!-- Decision-specific fields -->
+                <template v-if="m.type === 'decision'">
+                  <div v-if="m.id" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Event ID:</span>
+                    <span class="text-white font-mono">{{ m.id }}</span>
+                  </div>
+                  <div v-if="m.payload" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Decision:</span>
+                    <span :class="m.payload.status === 'allow' ? 'text-green-300' : 'text-red-400'" class="font-mono font-bold">{{ m.payload.status?.toUpperCase() }}</span>
+                  </div>
+                  <div v-if="m.payload?.token" class="flex gap-2 flex-col">
+                    <span class="text-gray-500">Token Granted:</span>
+                    <pre class="text-green-300 font-mono bg-black/30 p-2 rounded overflow-x-auto">{{ JSON.stringify(m.payload.token, null, 2) }}</pre>
+                  </div>
+                </template>
+                
+                <!-- Token action-specific fields -->
+                <template v-if="m.type === 'token'">
+                  <div v-if="m.action" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Action:</span>
+                    <span class="text-blue-300 font-mono font-bold">{{ m.action?.toUpperCase() }}</span>
+                  </div>
+                  <div v-if="m.token" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Token:</span>
+                    <span class="text-white font-mono break-all text-xs">{{ m.token }}</span>
+                  </div>
+                </template>
+                
+                <!-- Event-specific fields (for type: "event" or type: "ask") -->
+                <template v-if="m.type === 'event' || m.type === 'ask'">
+                  <!-- Agent info -->
+                  <div v-if="m.event?.agent" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Agent:</span>
+                    <span class="text-white font-mono">{{ m.event.agent }}</span>
+                  </div>
+                  
+                  <!-- Intent -->
+                  <div v-if="m.event?.intent" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Intent:</span>
+                    <span class="text-white font-mono">{{ m.event.intent }}</span>
+                  </div>
+                  
+                  <!-- Target -->
+                  <div v-if="m.event?.target" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Target:</span>
+                    <span class="text-white font-mono break-all">{{ m.event.target }}</span>
+                  </div>
+                  
+                  <!-- Request -->
+                  <div v-if="m.event?.request" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Request:</span>
+                    <pre class="text-sky-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.request, null, 2) }}</pre>
+                  </div>
+                  
+                  <!-- Response -->
+                  <div v-if="m.event?.response" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Response:</span>
+                    <pre class="text-green-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.response, null, 2) }}</pre>
+                  </div>
+                  
+                  <!-- Metadata -->
+                  <div v-if="m.event?.metadata" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Metadata:</span>
+                    <pre class="text-purple-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.metadata, null, 2) }}</pre>
+                  </div>
+                </template>
+                
+                <!-- Full timestamp (for all types) -->
+                <div class="flex gap-2">
+                  <span class="text-gray-500 w-20 shrink-0">Timestamp:</span>
+                  <span class="text-gray-400">{{ new Date(m.event?.ts || m.ts || Date.now()).toLocaleString() }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
+
