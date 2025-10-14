@@ -19,6 +19,28 @@ const filterText = ref('')
 const refreshing = ref(false)
 const searchQuery = ref('')
 const expandedEvents = ref<Set<number>>(new Set())
+const exporting = ref(false)
+
+// Export timeline to NDJSON
+async function exportTimeline() {
+  try {
+    exporting.value = true
+    const response = await fetch('http://127.0.0.1:3434/timeline.ndjson')
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `echos-timeline-${Date.now()}.ndjson`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+  } catch (error) {
+    console.error('Failed to export timeline:', error)
+  } finally {
+    exporting.value = false
+  }
+}
 
 // Function to filter events - safe for SSR
 function getFilteredEvents() {
@@ -137,6 +159,15 @@ function toggleEventDetails(index: number) {
           class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
           @click="refresh">
           {{ refreshing ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button 
+          :disabled="exporting"
+          class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors flex items-center gap-2" 
+          @click="exportTimeline">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          {{ exporting ? 'Exporting...' : 'Export' }}
         </button>
       </div>
     </header>
