@@ -1,0 +1,16 @@
+name: Research Assistant
+version: 1
+description: Read-only access for research tasks. Can query LLMs and APIs, but cannot modify or send data.
+allow:
+  - llm.chat:*
+  - http.request:GET*
+  - calendar.read:*
+  - email.read:*
+  - fs.read:*
+ask: []
+block:
+  - email.send:*
+  - slack.post:*
+  - fs.write:*
+  - fs.delete:*
+  - calendar.write:*

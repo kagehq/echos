@@ -1,8 +1,17 @@
 import { createApp, eventHandler, readBody, toNodeListener, setResponseHeader } from "h3";
 import { listen } from "listhen";
 import { WebSocketServer } from "ws";
-import { createSecretKey, randomBytes } from "node:crypto";
+import { createSecretKey, randomBytes, createHash } from "node:crypto";
 import * as jose from "jose";
+import { 
+  initTemplatesWatcher, 
+  listTemplates, 
+  applyRole, 
+  getResolvedPolicyRegex,
+  getRoleAssignment,
+  listRoleAssignments,
+  type ResolvedPolicy
+} from "./policies.js";
 
 type Decision = "allow"|"block"|"ask";
 type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean };
@@ -20,6 +29,10 @@ const TIMELINE: TimelineEntry[] = [];
 const SECRET_KEY = createSecretKey(process.env.ECHOS_SECRET ? Buffer.from(process.env.ECHOS_SECRET,"utf8") : randomBytes(32));
 const now = ()=>Date.now();
 const broadcast = (msg:any)=>{ const s=JSON.stringify(msg); for(const c of clients){ try{ c.send(s);}catch{} } };
+const safeHash = (token:string)=>"sha256:"+createHash("sha256").update(token).digest("hex");
+
+// Initialize template watcher (file-based policies with hot-reload)
+await initTemplatesWatcher();
 
 // Official scope taxonomy
 const SCOPES = {
@@ -103,23 +116,28 @@ app.use(eventHandler(async (req) => {
     }
   }
   
-  // Otherwise, apply policy rules
+  // Otherwise, apply policy rules (check role-based policy first, then fallback to base POLICY)
   const sig = `${e.intent}:${e.target ?? ""}`;
   let status:Decision = "block"; // SECURE DEFAULT: block if no policy matches or evaluation fails
   let matchedRule: string | null = null;
   let source: string | undefined = undefined;
   
   try {
+    // Check if agent has a role-applied policy
+    const rolePol = getResolvedPolicyRegex(e.agent);
+    const policyToUse = rolePol || POLICY;
+    const policySource = rolePol ? "role" : "base";
+    
     // Evaluate policies with ReDoS protection
-    if ((matchedRule = findMatch(POLICY.block, sig))) {
+    if ((matchedRule = findMatch(policyToUse.block, sig))) {
       status = "block";
-      source = "block";
-    } else if ((matchedRule = findMatch(POLICY.ask, sig))) {
+      source = `${policySource}_block`;
+    } else if ((matchedRule = findMatch(policyToUse.ask, sig))) {
       status = "ask";
-      source = "ask";
-    } else if ((matchedRule = findMatch(POLICY.allow, sig))) {
+      source = `${policySource}_ask`;
+    } else if ((matchedRule = findMatch(policyToUse.allow, sig))) {
       status = "allow";
-      source = "allow";
+      source = `${policySource}_allow`;
     }
   } catch (err) {
     // If regex evaluation fails/times out, default to BLOCK for security
@@ -204,14 +222,82 @@ app.use("/tokens/list", eventHandler(async ()=>({ tokens: Array.from(TOKENS.valu
 app.use("/tokens/introspect", eventHandler(async (req)=>{
   const { token } = await readBody<{token:string}>(req);
   const rec = TOKENS.get(token);
-  if (!rec) return { active: false };
+  if (!rec) return { active: false, status: "revoked" };
   const expired = now() >= rec.expiresAt;
   const active = rec.status === "active" && !expired;
-  return { active, agent: rec.agent, scopes: rec.scopes, exp: Math.floor(rec.expiresAt/1000), status: rec.status };
+  return { 
+    active, 
+    status: rec.status, 
+    agent: rec.agent, 
+    scopes: rec.scopes, 
+    expiresAt: rec.expiresAt,
+    tokenHash: safeHash(token)
+  };
 }));
 
 // List available scopes
 app.use("/scopes", eventHandler(async ()=>({ scopes: SCOPES })));
+
+// --- Templates & Roles APIs ---
+// List all available templates
+app.use("/templates", eventHandler(async ()=>({ templates: listTemplates() })));
+
+// Apply a role to an agent (with optional overrides)
+app.use("/roles/apply", eventHandler(async (req)=>{
+  const body = await readBody<{ 
+    agentId: string; 
+    template: string; 
+    overrides?: { allow?: string[]; ask?: string[]; block?: string[] } 
+  }>(req);
+  
+  try {
+    const resolved = applyRole(body.agentId, body.template, body.overrides as any);
+    
+    // Audit log: record role change
+    const msg = { 
+      type: "roleApplied", 
+      agent: body.agentId, 
+      template: body.template,
+      policy: resolved,
+      overrides: body.overrides,
+      ts: now() 
+    };
+    TIMELINE.unshift(msg);
+    await broadcast(msg);
+    
+    return { ok: true, policy: resolved };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}));
+
+// Get resolved policy for a specific agent
+app.use(eventHandler(async (req)=>{
+  const match = req.path?.match(/^\/roles\/(.+)$/);
+  if (!match || req.method !== 'GET') return;
+  
+  const agentId = decodeURIComponent(match[1]);
+  const assignment = getRoleAssignment(agentId);
+  
+  if (!assignment) {
+    return { agentId, allow: [], ask: [], block: [], template: null };
+  }
+  
+  return { 
+    agentId, 
+    template: assignment.template,
+    appliedAt: assignment.appliedAt,
+    allow: assignment.policy.allow, 
+    ask: assignment.policy.ask, 
+    block: assignment.policy.block 
+  };
+}));
+
+// List all role assignments
+app.use("/roles", eventHandler(async (req)=>{
+  if (req.method !== 'GET') return;
+  return { roles: listRoleAssignments() };
+}));
 
 // Events & timeline
 app.use("/events", eventHandler(async (req)=>{ 

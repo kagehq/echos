@@ -1,0 +1,7 @@
+name: Unrestricted (Admin)
+version: 1
+description: Full access for trusted agents. Use with caution.
+allow:
+  - "*"
+ask: []
+block: []

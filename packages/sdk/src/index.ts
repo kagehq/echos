@@ -58,6 +58,79 @@ export class EchosClient {
     const headers = { ...(init?.headers||{}), ...this.authHeader() };
     return { ok: true, status: 200 }; // Stub for now
   }
+
+  // Introspect a token to check its validity and get details
+  async introspect(token: string){
+    try {
+      const data = await postJSON<{
+        active: boolean; 
+        status?: string; 
+        agent?: string; 
+        scopes?: string[]; 
+        expiresAt?: number;
+        tokenHash?: string;
+      }>("/tokens/introspect", { token });
+      return data ?? { active: false };
+    } catch {
+      return { active: false };
+    }
+  }
+
+  // List available policy templates
+  async listTemplates(){
+    try {
+      const res = await request(`${ENDPOINT}/templates`, { method: "GET" });
+      const data = await res.body.json() as any;
+      return data?.templates ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  // Apply a role/template to this agent (or another agent)
+  async applyRole(opts: {
+    agentId?: string;
+    template: string;
+    overrides?: { allow?: string[]; ask?: string[]; block?: string[] };
+  }){
+    try {
+      const data = await postJSON<{
+        ok: boolean;
+        policy?: { allow: string[]; ask: string[]; block: string[] };
+        error?: string;
+      }>("/roles/apply", {
+        agentId: opts.agentId ?? this.agent,
+        template: opts.template,
+        overrides: opts.overrides
+      });
+      return data;
+    } catch {
+      return { ok: false, error: "Failed to apply role" };
+    }
+  }
+
+  // Get the resolved policy for this agent (or another agent)
+  async getPolicy(agentId?: string){
+    try {
+      const id = agentId ?? this.agent;
+      const res = await request(`${ENDPOINT}/roles/${encodeURIComponent(id)}`, { method: "GET" });
+      const data = await res.body.json() as any;
+      return data;
+    } catch {
+      return { agentId: agentId ?? this.agent, allow: [], ask: [], block: [], template: null };
+    }
+  }
+
+  // List all role assignments
+  async listRoles(){
+    try {
+      const res = await request(`${ENDPOINT}/roles`, { method: "GET" });
+      const data = await res.body.json() as any;
+      return data?.roles ?? [];
+    } catch {
+      return [];
+    }
+  }
 }
 
 export function echos(name?:string){ return new EchosClient(name); }

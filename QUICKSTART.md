@@ -48,6 +48,16 @@ await agent.authorize({
   reason: "Deploy notifications"
 });
 
+// Apply a policy template to your agent
+await agent.applyRole({
+  template: "research_assistant",
+  overrides: { allow: ["calendar.write:*"] }
+});
+
+// Check your agent's current policy
+const policy = await agent.getPolicy();
+console.log(policy.allow); // ["llm.chat:*", "http.request:GET*", ...]
+
 // Blocked actions throw errors
 try {
   await agent.emit("fs.delete", "/data.json");
@@ -57,6 +67,38 @@ try {
 ```
 
 ## Policy Configuration
+
+### Option 1: Templates (Recommended)
+
+Apply pre-configured templates to agents:
+
+```typescript
+await agent.applyRole({ template: "research_assistant" });
+```
+
+**Built-in templates:**
+- `research_assistant` - Read-only (LLM, HTTP GET, calendar/email read)
+- `customer_support` - Draft responses, requires approval to send
+- `internal_notifier` - Posts to internal Slack channels
+- `unrestricted` - Full access for trusted agents
+
+Create custom templates in `apps/daemon/templates/my_template.yaml`:
+
+```yaml
+name: "Sales Bot"
+version: 1
+allow:
+  - "llm.chat:*"
+  - "crm.write:*"
+ask:
+  - "email.send:*@company.com"
+block:
+  - "fs.delete:*"
+```
+
+Templates hot-reload automatically. Role assignments persist across restarts.
+
+### Option 2: Global Policy File
 
 Edit `~/.echos/echos.yaml` (created on first run):
 
@@ -92,6 +134,7 @@ tsx your-agent.ts
 - **Feed** (`/`) - Live stream with WebSocket, search, and refresh
 - **Timeline** (`/timeline`) - Historical audit log with search and filters
 - **Metrics** (`/metrics`) - Performance analytics, activity charts, and statistics
+- **Roles** (`/roles`) - Apply policy templates to agents, view resolved policies
 - **Expandable Events** - Click any event to see request/response/metadata details
 - **Token Management** - Manage authorizations (pause/resume/revoke)
 - **Consent Modal** - Approve actions with "Deny", "Allow once", or "Allow 1h"

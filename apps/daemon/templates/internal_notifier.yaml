@@ -1,0 +1,16 @@
+name: Internal Notifier
+version: 1
+description: Posts to internal Slack channels, reads analytics, drafts emails.
+allow:
+  - llm.chat:*
+  - http.request:GET*
+  - analytics.read:*
+  - slack.post:#internal-*
+  - slack.post:#reports
+  - email.draft:*
+ask:
+  - email.send:*@company.com
+  - slack.post:*
+block:
+  - fs.delete:*
+  - email.send:*@*

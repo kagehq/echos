@@ -341,6 +341,7 @@ function toggleEventDetails(index: number) {
               <div v-else-if="m.type==='ask'" class="w-12 shrink-0 text-amber-300">ASK</div>
               <div v-else-if="m.type==='decision'" :class="m.payload?.status==='allow' ? 'text-green-300' : 'text-red-400'" class="w-12 shrink-0">{{ m.payload?.status==='allow' ? '200' : '403' }}</div>
               <div v-else-if="m.type==='token'" class="w-12 shrink-0 text-blue-300">TOK</div>
+              <div v-else-if="m.type==='roleApplied'" class="w-12 shrink-0 text-purple-300">ROLE</div>
               <div v-else class="w-12 shrink-0 text-gray-400">---</div>
               
               <!-- Method/Type -->
@@ -348,6 +349,7 @@ function toggleEventDetails(index: number) {
               <div v-else-if="m.type==='ask'" class="w-20 shrink-0 text-white">ASK</div>
               <div v-else-if="m.type==='decision'" class="w-20 shrink-0 text-white">DECIDE</div>
               <div v-else-if="m.type==='token'" class="w-20 shrink-0 text-white">{{ m.action?.toUpperCase() || 'TOKEN' }}</div>
+              <div v-else-if="m.type==='roleApplied'" class="w-20 shrink-0 text-white">APPLIED</div>
               <div v-else class="w-20 shrink-0 text-white">UNKNOWN</div>
               
               <!-- Path/Target -->
@@ -360,6 +362,7 @@ function toggleEventDetails(index: number) {
                 <span v-if="m.payload?.token" class="text-gray-400 ml-2">- token granted</span>
               </div>
               <div v-else-if="m.type==='token'" class="flex-1 text-gray-400">{{ m.token?.slice(0, 40) }}...</div>
+              <div v-else-if="m.type==='roleApplied'" class="flex-1 text-gray-400">{{ m.agent }} → {{ m.template }}</div>
               <div v-else class="flex-1 text-gray-400">{{ JSON.stringify(m).slice(0, 60) }}...</div>
               
               <!-- Expand indicator -->
@@ -424,6 +427,54 @@ function toggleEventDetails(index: number) {
                   <div v-if="m.token" class="flex gap-2">
                     <span class="text-gray-500 w-20 shrink-0">Token:</span>
                     <span class="text-white font-mono break-all text-xs">{{ m.token }}</span>
+                  </div>
+                </template>
+                
+                <!-- Role Applied events -->
+                <template v-if="m.type === 'roleApplied'">
+                  <div v-if="m.agent" class="flex gap-2">
+                    <span class="text-gray-500 w-24 shrink-0">Agent:</span>
+                    <span class="text-white font-mono">{{ m.agent }}</span>
+                  </div>
+                  <div v-if="m.template" class="flex gap-2">
+                    <span class="text-gray-500 w-24 shrink-0">Template:</span>
+                    <span class="text-purple-300 font-mono">{{ m.template }}</span>
+                  </div>
+                  <div v-if="m.policy" class="flex gap-2 flex-col mt-2">
+                    <span class="text-gray-500">Policy Applied:</span>
+                    <div class="grid grid-cols-3 gap-4 mt-1">
+                      <div>
+                        <div class="text-emerald-400/60 text-xs uppercase mb-1">Allow ({{ m.policy.allow?.length || 0 }})</div>
+                        <div class="space-y-0.5">
+                          <div v-for="(rule, i) in m.policy.allow?.slice(0, 3)" :key="i" class="text-emerald-400 font-mono text-xs bg-emerald-500/5 px-1.5 py-0.5 rounded">
+                            {{ rule }}
+                          </div>
+                          <div v-if="m.policy.allow?.length > 3" class="text-gray-500 text-xs">+{{ m.policy.allow.length - 3 }} more</div>
+                        </div>
+                      </div>
+                      <div>
+                        <div class="text-amber-400/60 text-xs uppercase mb-1">Ask ({{ m.policy.ask?.length || 0 }})</div>
+                        <div class="space-y-0.5">
+                          <div v-for="(rule, i) in m.policy.ask?.slice(0, 3)" :key="i" class="text-amber-400 font-mono text-xs bg-amber-500/5 px-1.5 py-0.5 rounded">
+                            {{ rule }}
+                          </div>
+                          <div v-if="m.policy.ask?.length > 3" class="text-gray-500 text-xs">+{{ m.policy.ask.length - 3 }} more</div>
+                        </div>
+                      </div>
+                      <div>
+                        <div class="text-rose-400/60 text-xs uppercase mb-1">Block ({{ m.policy.block?.length || 0 }})</div>
+                        <div class="space-y-0.5">
+                          <div v-for="(rule, i) in m.policy.block?.slice(0, 3)" :key="i" class="text-rose-400 font-mono text-xs bg-rose-500/5 px-1.5 py-0.5 rounded">
+                            {{ rule }}
+                          </div>
+                          <div v-if="m.policy.block?.length > 3" class="text-gray-500 text-xs">+{{ m.policy.block.length - 3 }} more</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="m.overrides && (m.overrides.allow?.length || m.overrides.ask?.length || m.overrides.block?.length)" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500">Overrides Applied:</span>
+                    <pre class="text-gray-300 font-mono bg-black/30 p-2 rounded overflow-x-auto text-xs">{{ JSON.stringify(m.overrides, null, 2) }}</pre>
                   </div>
                 </template>
                 

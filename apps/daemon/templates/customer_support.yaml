@@ -1,0 +1,16 @@
+name: Customer Support Agent
+version: 1
+description: Handles customer queries. Can draft responses, requires approval to send.
+allow:
+  - llm.chat:*
+  - crm.read:*
+  - http.request:GET*/api/tickets*
+  - email.draft:*
+  - slack.read:#support
+ask:
+  - email.send:*@*
+  - slack.post:#support
+  - crm.write:*
+block:
+  - fs.delete:*
+  - email.send:*@competitor.com

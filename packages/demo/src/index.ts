@@ -88,10 +88,35 @@ async function run() {
   await new Promise(resolve => setTimeout(resolve, 2000));
   
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("PHASE 2: Token-Based Authorization");
+  console.log("PHASE 2: Roles & Templates");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   
-  console.log("4️⃣  First calendar access → will ASK for permission");
+  console.log("4️⃣  Listing available policy templates...");
+  const templates = await agent.listTemplates();
+  console.log(`   ✅ Found ${templates.length} templates: ${templates.map((t: any) => t.id).join(", ")}`);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  console.log("5️⃣  Applying 'research_assistant' role to demo_bot...");
+  const roleResult = await agent.applyRole({ 
+    template: "research_assistant",
+    overrides: { allow: ["calendar.write:*"] }
+  });
+  if (roleResult?.ok) {
+    console.log("   ✅ Role applied successfully!");
+    console.log(`   📋 Policy: ${roleResult.policy?.allow?.length || 0} allow, ${roleResult.policy?.ask?.length || 0} ask, ${roleResult.policy?.block?.length || 0} block rules`);
+  }
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  console.log("6️⃣  Checking current policy...");
+  const policy = await agent.getPolicy();
+  console.log(`   ✅ Agent policy: template=${policy.template || 'none'}, ${policy.allow?.length || 0} allow rules`);
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("PHASE 3: Token-Based Authorization");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  
+  console.log("7️⃣  First calendar access → will ASK for permission");
   console.log("   💡 In the dashboard, click 'Allow 1h' to grant a token!");
   try {
     await agent.emit(
@@ -106,7 +131,7 @@ async function run() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     // If we got here, the user granted a token via "Allow 1h"
-    console.log("5️⃣  Second calendar access → using the token");
+    console.log("8️⃣  Second calendar access → using the token");
     await agent.emit(
       "calendar.write", 
       "team-calendar", 
@@ -118,7 +143,7 @@ async function run() {
     console.log("   ✅ No consent needed - token was used!");
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    console.log("6️⃣  Third calendar access → still using the same token");
+    console.log("9️⃣  Third calendar access → still using the same token");
     await agent.emit(
       "calendar.read", 
       "shared-calendar",
@@ -139,6 +164,7 @@ async function run() {
   console.log("   • Feed: See all events in real-time with live WebSocket updates");
   console.log("   • Timeline: Review historical actions - click events to expand!");
   console.log("   • Metrics: View performance analytics and activity charts");
+  console.log("   • Roles: Manage policy templates and view applied roles (we just applied one!)");
   console.log("   • Event Details: Click any event to see request/response/metadata");
   console.log("   • Policy Transparency: See which rule matched for each decision");
   console.log("   • Tokens: Manage active authorizations");

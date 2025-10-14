@@ -54,13 +54,20 @@ const metrics = computed(() => {
   const allowed = filtered.filter(e => e.type === 'event' && !e.event?.tokenAttached).length;
   const asked = filtered.filter(e => e.type === 'ask').length;
   const blocked = filtered.filter(e => e.type === 'decision' && e.payload?.status === 'block').length;
-  const uniqueAgents = new Set(filtered.map(e => e.event?.agent).filter(Boolean)).size;
+  const rolesApplied = filtered.filter(e => e.type === 'roleApplied').length;
+  const tokensIssued = filtered.filter(e => e.type === 'token' && e.action === 'issued').length;
+  const uniqueAgents = new Set([
+    ...filtered.filter(e => e.event?.agent).map(e => e.event.agent),
+    ...filtered.filter(e => e.type === 'roleApplied' && e.agent).map(e => e.agent)
+  ].filter(Boolean)).size;
 
   return {
     total: filtered.length,
     allowed,
     asked,
     blocked,
+    rolesApplied,
+    tokensIssued,
     avgTime: 0, // TODO: Calculate from metadata if available
     agents: uniqueAgents
   };
@@ -317,6 +324,30 @@ onMounted(async () => {
           </div>
           <div class="text-3xl font-bold text-red-400">{{ metrics.blocked }}</div>
           <div class="text-xs text-gray-500 mt-1">{{ metrics.total > 0 ? Math.round((metrics.blocked / metrics.total) * 100) : 0 }}% of total</div>
+        </div>
+
+        <!-- Roles Applied -->
+        <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-gray-400 text-sm">Roles Applied</span>
+            <svg class="w-5 h-5 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div class="text-3xl font-bold text-purple-300">{{ metrics.rolesApplied }}</div>
+          <div class="text-xs text-gray-500 mt-1">Policy assignments</div>
+        </div>
+
+        <!-- Tokens Issued -->
+        <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-gray-400 text-sm">Tokens Issued</span>
+            <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <div class="text-3xl font-bold text-blue-300">{{ metrics.tokensIssued }}</div>
+          <div class="text-xs text-gray-500 mt-1">Authorization tokens</div>
         </div>
 
         <!-- Agents -->

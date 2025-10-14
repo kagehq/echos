@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  currentPage: 'feed' | 'timeline' | 'metrics'
+  currentPage: 'feed' | 'timeline' | 'metrics' | 'roles'
 }>()
 </script>
 
@@ -33,6 +33,13 @@ defineProps<{
             ? 'text-white bg-gray-500/20 rounded-lg p-1 px-2 border border-gray-500/20' 
             : 'text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2'">
           Metrics
+        </NuxtLink>
+        <NuxtLink 
+          to="/roles" 
+          :class="currentPage === 'roles' 
+            ? 'text-white bg-gray-500/20 rounded-lg p-1 px-2 border border-gray-500/20' 
+            : 'text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2'">
+          Roles
         </NuxtLink>
       </nav>
     </h1>

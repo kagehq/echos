@@ -6,6 +6,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "chokidar": "^4.0.3",
     "h3": "^1.11.1",
     "jose": "^6.1.0",
     "listhen": "^1.8.1",
@@ -13,7 +14,7 @@
     "node-fetch": "^3.3.2",
     "pathe": "^1.1.2",
     "ws": "^8.18.0",
-    "yaml": "^2.4.2"
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/node": "^20.12.7",

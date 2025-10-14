@@ -9,3 +9,6 @@ dist
 # Test files (keep tests/ directory but ignore temp test files in root)
 test-*.mjs
 test-*.js
+
+# User-specific role assignments
+.roles.json

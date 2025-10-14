@@ -8,13 +8,11 @@ html {
 	font-feature-settings: "calt", "dlig", "liga", "kern", "ss01", "ss02", "ss03", "ss04", "ss07", "ss08", "tnum", "cv02", "cv03", "cv04", "cv11";
 	font-synthesis: none;
 	scroll-behavior: smooth;
-	/* font-weight: 400; */
-	/* font-style: normal; */
 }
 
 
 body, html {
-	background: var(--dark-bg);
+	@apply bg-black;
   @apply w-full;
   @apply h-full;
   @apply overscroll-y-none;

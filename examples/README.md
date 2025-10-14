@@ -4,6 +4,24 @@ This directory contains example agent scripts demonstrating Echos in action.
 
 ## Available Examples
 
+### 🚀 Basic Usage (`basic-usage.ts`)
+Simple introduction to Echos SDK showing core concepts and basic actions.
+
+**Scopes used**: `llm.chat`, `http.request`, `slack.post`, `fs.delete`, `email.send`
+
+```bash
+tsx examples/basic-usage.ts
+```
+
+### 🎭 Roles & Templates (`roles-templates.ts`)
+Demonstrates the roles and templates system for managing agent policies programmatically.
+
+**Features**: Template listing, role application, policy inspection, role assignments
+
+```bash
+tsx examples/roles-templates.ts
+```
+
 ### 🤖 RecruitBot (`recruit-bot.ts`)
 Automated candidate outreach with email drafting and calendar scheduling.
 
@@ -76,14 +94,20 @@ import { echos } from "@echoshq/sdk";
 
 const agent = echos("MyAgent");
 
-// Option 1: Request authorization upfront (recommended for long-running agents)
+// Option 1: Apply a policy template (recommended)
+await agent.applyRole({ 
+  template: "research_assistant",
+  overrides: { allow: ["calendar.write:*"] }
+});
+
+// Option 2: Request authorization upfront (for long-running agents)
 await agent.authorize({
   scopes: ["slack.post", "llm.chat"],
   durationSec: 3600,  // 1 hour
   reason: "Daily notifications"
 });
 
-// Option 2: Emit actions and handle consent inline
+// Option 3: Emit actions and handle consent inline
 try {
   await agent.emit("slack.post", "#general", {
     text: "Hello from MyAgent!"
@@ -92,16 +116,19 @@ try {
   console.error("Action denied:", err);
 }
 
-// Option 3: Use the fetch wrapper for HTTP requests
+// Option 4: Use the fetch wrapper for HTTP requests
 const response = await agent.fetch("https://api.example.com/data");
 ```
 
 ## Tips
 
+- **Use policy templates** for consistent agent behavior - apply roles programmatically
+- **Create custom templates** in `apps/daemon/templates/` for your specific use cases
 - **Start with `.authorize()`** for agents that need multiple scopes
 - **Use short durations** (1-2 hours) for security
 - **Provide clear reasons** so humans understand why you need access
 - **Handle errors gracefully** - actions can be denied or time out
+- **Check the Roles page** at `http://localhost:3000/roles` to see applied policies
 - **Test locally** before deploying - all data stays on your machine!
 
 ## Learn More
