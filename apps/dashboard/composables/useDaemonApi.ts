@@ -38,15 +38,21 @@ export async function daemonRequest<T = any>(
   const timeoutId = setTimeout(() => controller.abort(), timeout)
   
   try {
-    const response = await $fetch<T>(`${DAEMON_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${DAEMON_BASE_URL}${endpoint}`, {
       method,
-      body,
+      body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
-      // Disable automatic retry on error
-      retry: false,
+      headers: {
+        'Content-Type': 'application/json',
+      },
     })
     
-    return response
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return data as T
   } catch (error: any) {
     // Handle abort/timeout
     if (error.name === 'AbortError' || controller.signal.aborted) {
@@ -58,6 +64,7 @@ export async function daemonRequest<T = any>(
     // Handle network/connection errors
     if (error.cause?.code === 'ECONNREFUSED' || 
         error.message?.includes('fetch failed') ||
+        error.message?.includes('Failed to fetch') ||
         error.message?.includes('ECONNREFUSED')) {
       throw new DaemonConnectionError(
         `Cannot connect to daemon at ${DAEMON_BASE_URL}`

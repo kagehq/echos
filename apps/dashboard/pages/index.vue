@@ -380,6 +380,13 @@ async function resume(t:any){
   <div class="h-screen bg-black flex flex-col overflow-hidden">
     <AppHeader currentPage="feed">
       <template #actions>
+        <div class="flex items-center gap-2">
+          <span :class="['inline-block w-2 h-2 rounded-full', connected ? 'bg-green-300' : 'bg-red-500']"></span>
+          <span class="text-gray-400 text-xs">
+            {{ connected ? 'Connected' : 'Disconnected' }}
+          </span>
+        </div>
+        <span class="text-gray-500/50">|</span>
         <button 
           :disabled="refreshing"
           class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors" 
@@ -393,7 +400,7 @@ async function resume(t:any){
             :disabled="exporting"
             class="px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20 text-xs hover:bg-gray-500/20 disabled:opacity-50 transition-colors flex items-center gap-2" 
             @click="showExportMenu = !showExportMenu">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             {{ exporting ? 'Exporting...' : 'Export' }}
@@ -430,11 +437,6 @@ async function resume(t:any){
             </button>
           </div>
         </div>
-        
-        <span :class="['inline-block w-2 h-2 rounded-full', connected ? 'bg-green-300' : 'bg-red-500']"></span>
-        <span class="text-gray-400 text-xs">
-          {{ connected ? 'Connected' : 'Disconnected' }}
-        </span>
       </template>
     </AppHeader>
 

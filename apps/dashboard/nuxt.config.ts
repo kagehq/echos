@@ -2,6 +2,7 @@
 export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/ui'],
+  ssr: false,
   css: ['~/assets/css/main.css'],
   postcss: {
     plugins: {
