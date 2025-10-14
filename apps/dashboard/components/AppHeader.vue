@@ -23,14 +23,14 @@ defineProps<{
         <NuxtLink 
           to="/timeline" 
           :class="currentPage === 'timeline' 
-            ? 'text-white bg-gray-500/10 rounded-lg p-1 px-2 border border-gray-500/10' 
+            ? 'text-white bg-gray-500/20 rounded-lg p-1 px-2 border border-gray-500/20' 
             : 'text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2'">
           Timeline
         </NuxtLink>
         <NuxtLink 
           to="/metrics" 
           :class="currentPage === 'metrics' 
-            ? 'text-white bg-gray-500/10 rounded-lg p-1 px-2 border border-gray-500/10' 
+            ? 'text-white bg-gray-500/20 rounded-lg p-1 px-2 border border-gray-500/20' 
             : 'text-gray-400 hover:text-white bg-transparent border border-transparent rounded-lg p-1 px-2'">
           Metrics
         </NuxtLink>
