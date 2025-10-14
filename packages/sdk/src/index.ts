@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 
 const ENDPOINT = process.env.ECHOS_ENDPOINT ?? "http://127.0.0.1:3434";
 type Decision = "allow"|"block"|"ask";
+type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean };
 export type EchosToken = { token:string; expiresAt:number; scopes:string[]; status:"active"|"paused"|"revoked" };
 
 async function postJSON<T=any>(path:string, body:any){ try{
@@ -38,7 +39,7 @@ export class EchosClient {
       decidePayload.token = this.token.token;
     }
     
-    const decision = await postJSON<{status:Decision, id:string}>("/decide", decidePayload) ?? { status:"allow" as Decision, id:evt.id };
+    const decision = await postJSON<{status:Decision, id:string, policy?: PolicyMatch}>("/decide", decidePayload) ?? { status:"allow" as Decision, id:evt.id };
 
     if (decision.status === "ask"){
       const wait = await postJSON<{status:"allow"|"block", token?:EchosToken}>(`/await/${evt.id}`, {});
@@ -47,7 +48,7 @@ export class EchosClient {
     }
     if (decision.status === "block") throw new Error("Echos: action blocked");
 
-    await postJSON("/events", { ...evt, tokenAttached: !!this.token });
+    await postJSON("/events", { ...evt, tokenAttached: !!this.token, policy: decision.policy });
     return evt;
   }
 

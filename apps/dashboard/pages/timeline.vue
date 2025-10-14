@@ -287,6 +287,33 @@ function toggleEventDetails(index: number) {
                     <span class="text-gray-500 w-20 shrink-0">Metadata:</span>
                     <pre class="text-purple-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.metadata, null, 2) }}</pre>
                   </div>
+                  
+                  <!-- Policy Decision -->
+                  <div v-if="m.event?.policy" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Policy Decision:</span>
+                    <div class="ml-4 space-y-1">
+                      <div class="flex gap-2">
+                        <span class="text-gray-500">Status:</span>
+                        <span :class="{
+                          'text-green-300': m.event.policy.status === 'allow',
+                          'text-red-400': m.event.policy.status === 'block',
+                          'text-yellow-300': m.event.policy.status === 'ask'
+                        }" class="font-mono font-bold">{{ m.event.policy.status?.toUpperCase() }}</span>
+                      </div>
+                      <div v-if="m.event.policy.byToken" class="flex gap-2">
+                        <span class="text-gray-500">Method:</span>
+                        <span class="text-blue-300 font-mono">Authorized by token</span>
+                      </div>
+                      <div v-else-if="m.event.policy.rule" class="flex gap-2">
+                        <span class="text-gray-500">Matched Rule:</span>
+                        <span class="text-orange-300 font-mono">{{ m.event.policy.rule }}</span>
+                      </div>
+                      <div v-if="m.event.policy.source && !m.event.policy.byToken" class="flex gap-2">
+                        <span class="text-gray-500">Rule Source:</span>
+                        <span class="text-gray-300 font-mono">{{ m.event.policy.source }} policy</span>
+                      </div>
+                    </div>
+                  </div>
                 </template>
                 
                 <!-- Full timestamp (for all types) -->

@@ -5,8 +5,9 @@ import { createSecretKey, randomBytes } from "node:crypto";
 import * as jose from "jose";
 
 type Decision = "allow"|"block"|"ask";
+type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean };
 type TokenRecord = { token:string; agent:string; scopes:string[]; expiresAt:number; status:"active"|"paused"|"revoked" };
-type EventMsg = { id:string; ts:number; agent:string; intent:string; target?:string; meta?:any; preview?:string; tokenAttached?:boolean; request?:any; response?:any; metadata?:any };
+type EventMsg = { id:string; ts:number; agent:string; intent:string; target?:string; meta?:any; preview?:string; tokenAttached?:boolean; request?:any; response?:any; metadata?:any; policy?: PolicyMatch };
 type TimelineEntry = EventMsg | { type: string; ts: number; action?: string; token?: string; [key: string]: any };
 
 const app = createApp();
@@ -42,6 +43,12 @@ const POLICY = {
   block: [/^fs\.delete:/]
 };
 const match = (arr:RegExp[], s:string)=>arr.some(r=>r.test(s));
+const findMatch = (arr:RegExp[], s:string):string|null => {
+  for(const r of arr) {
+    if (r.test(s)) return r.source;
+  }
+  return null;
+};
 
 // ENV config (read early for CORS)
 const CORS_ORIGIN = process.env.ECHOS_CORS_ORIGIN || "*";
@@ -63,13 +70,16 @@ app.use(eventHandler(async (req) => {
   const body = await readBody<EventMsg & { token?: string }>(req);
   const { token, ...e } = body;
   
+  let policyMatch: PolicyMatch;
+  
   // Check if a valid token exists that covers this intent
   if (token) {
     const tokenRec = TOKENS.get(token);
     if (tokenRec && tokenRec.status === "active" && now() < tokenRec.expiresAt) {
       // Check if token scopes cover this intent
       if (tokenRec.scopes.includes(e.intent)) {
-        return { status: "allow" as Decision, id: e.id };
+        policyMatch = { status: "allow", byToken: true };
+        return { status: "allow" as Decision, id: e.id, policy: policyMatch };
       }
     }
   }
@@ -77,14 +87,32 @@ app.use(eventHandler(async (req) => {
   // Otherwise, apply policy rules
   const sig = `${e.intent}:${e.target ?? ""}`;
   let status:Decision = "allow";
-  if (match(POLICY.block, sig)) status = "block";
-  else if (match(POLICY.ask, sig)) status = "ask";
+  let matchedRule: string | null = null;
+  let source: string | undefined = undefined;
+  
+  if ((matchedRule = findMatch(POLICY.block, sig))) {
+    status = "block";
+    source = "block";
+  } else if ((matchedRule = findMatch(POLICY.ask, sig))) {
+    status = "ask";
+    source = "ask";
+  } else if ((matchedRule = findMatch(POLICY.allow, sig))) {
+    source = "allow";
+  }
+  
+  policyMatch = { 
+    status, 
+    rule: matchedRule || undefined, 
+    source,
+    byToken: false 
+  };
+  
   if (status === "ask") {
-    const msg = { type:"ask", event:e, ts: now() };
+    const msg = { type:"ask", event:{ ...e, policy: policyMatch }, ts: now() };
     TIMELINE.unshift(msg);
     await broadcast(msg);
   }
-  return { status, id: e.id };
+  return { status, id: e.id, policy: policyMatch };
 }));
 
 // Long-poll wait for human decision (from dashboard)
