@@ -12,7 +12,7 @@ defineProps<{
         <span class="text-white font-medium text-base">Echos</span>
       </div>
       <span class="text-gray-500/40 text-sm">/</span>
-      <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/10 rounded-lg p-0.5 px-1">
+      <nav class="text-xs flex items-center gap-2 bg-gray-500/5 border border-gray-500/20 rounded-xl p-0.5 px-0.5">
         <NuxtLink 
           to="/" 
           :class="currentPage === 'feed' 
