@@ -4,6 +4,15 @@ This directory contains example agent scripts demonstrating Echos in action.
 
 ## Available Examples
 
+### 🌟 Your First Agent (`first-agent.ts`) **← START HERE**
+New to autonomous agents? This guided example shows you how to build your first agent with safety guardrails.
+
+**Perfect for**: Developers coming from interactive AI tools (Cursor, Claude, etc.)
+
+```bash
+tsx examples/first-agent.ts
+```
+
 ### 🚀 Basic Usage (`basic-usage.ts`)
 Simple introduction to Echos SDK showing core concepts and basic actions.
 

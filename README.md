@@ -4,6 +4,35 @@ A firewall for AI agents to observe and control every action your agents take in
 
 Unlike passive monitoring tools, Echos intercepts actions *before* they happen, giving you policy-based control and human approval for sensitive operations.
 
+## What is Echos For?
+
+Echos is for **autonomous AI agents** - programs that run independently and take actions on your behalf.
+
+### When You Need Echos:
+
+**✅ Building autonomous agents:**
+- **Scheduled bots**: Cron jobs that send daily Slack reports
+- **CI/CD automation**: GitHub bots that review PRs and post comments  
+- **Monitoring agents**: Alert systems that email/Slack when issues arise
+- **Data pipelines**: Scripts that fetch APIs and write to databases
+- **Research assistants**: Bots that search, summarize, and file reports
+- **Customer support**: Auto-responders with LLM-generated replies
+- **Social media bots**: Scheduled posts with approval workflows
+
+**❌ Not for interactive tools:**
+- AI coding assistants (Cursor, Copilot, GitHub Copilot) - you're in control
+- ChatGPT/Claude conversations - no automated actions
+- Tools where you approve each action yourself already
+
+### Why This Matters:
+
+As agents become more capable, they'll need guardrails. Echos gives you:
+- **Visibility**: See every action before it happens
+- **Control**: Approve/deny sensitive operations in real-time
+- **Audit trail**: Track what your agents actually did
+- **Policy enforcement**: Set rules once, apply everywhere
+
+**Use Echos when:** You're ready to let an AI agent run autonomously, but want a safety net before it sends that email, deletes that file, or posts to production Slack.
 
 ## Installation
 
@@ -35,6 +64,21 @@ The demo starts the daemon (`:3434`), dashboard (`:3000`), and runs a sample age
 
 ### Use in Your Project
 
+**Step 1:** Clone Echos (for daemon & dashboard)
+```bash
+git clone https://github.com/kagehq/echos.git
+cd echos
+pnpm install
+pnpm build:all
+```
+
+**Step 2:** Install the SDK in your agent project
+```bash
+# In your own project directory
+npm install @echoshq/sdk
+```
+
+**Step 3:** Import and use in your agent code
 ```typescript
 import { echos } from "@echoshq/sdk";
 
@@ -42,7 +86,19 @@ const agent = echos("my_agent");
 await agent.emit("slack.post", "#general", { text: "Hello!" });
 ```
 
-Then start the Echos daemon and dashboard separately to monitor your agent.
+**Step 4:** Run Echos + your agent (3 terminals)
+```bash
+# Terminal 1: Start daemon (from echos repo)
+cd echos && pnpm dev:daemon
+
+# Terminal 2: Start dashboard (from echos repo)
+cd echos && pnpm dev:dashboard
+
+# Terminal 3: Run your agent (from your project)
+node your-agent.js
+```
+
+Then visit `http://localhost:3000` to see your agent's actions in real-time!
 
 ## Development
 
