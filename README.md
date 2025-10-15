@@ -111,7 +111,7 @@ Then visit `http://localhost:3000` to see your agent's actions in real-time!
 ### Use with VSCode Extension
 
 **Test and build agents directly in your IDE:**
-- **🔥 Workflow Recorder** - Detects patterns, suggests automation ("You've done this 3 times. Want to automate?")
+- **Workflow Recorder** - Detects patterns, suggests automation ("You've done this 3 times. Want to automate?")
 - **Action Playground** - Test policies without writing code
 - **Inline Approvals** - Approve/deny without leaving your editor
 - **Code Actions** - Right-click → Wrap with Echos / Convert to Agent
