@@ -105,6 +105,16 @@ curl http://127.0.0.1:3434/scopes | jq
 
 3. **Watch the dashboard** at `http://localhost:3000` to approve actions!
 
+**🆕 NEW: Use the VSCode Extension!**
+
+Test and control agents directly in your editor:
+- Press `F5` to launch the extension
+- Open Command Palette: `Cmd+Shift+P`
+- Run: `Echos: Open Action Playground`
+- Test actions interactively without writing code!
+
+[Learn more →](../apps/vscode-extension/QUICKSTART.md)
+
 ## Building Your Own Agent
 
 ```typescript

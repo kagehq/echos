@@ -1,0 +1,160 @@
+{
+  "name": "echos-vscode",
+  "displayName": "Echos - AI Agent Firewall",
+  "description": "Test, monitor, and control AI agents directly in your IDE",
+  "version": "0.1.0",
+  "publisher": "echoshq",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kagehq/echos.git"
+  },
+  "license": "FSL-1.1-MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Testing",
+    "Debuggers"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "llm",
+    "monitoring",
+    "firewall"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "echos.openPlayground",
+        "title": "Open Action Playground",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.testAction",
+        "title": "Test Agent Action",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.startDaemon",
+        "title": "Start Daemon",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.stopDaemon",
+        "title": "Stop Daemon",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.viewTimeline",
+        "title": "View Activity Timeline",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.newAgent",
+        "title": "New Agent from Template",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.editPolicy",
+        "title": "Edit Policy",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.manageTokens",
+        "title": "Manage Tokens",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.wrapWithEchos",
+        "title": "Wrap Code with Echos",
+        "category": "Echos"
+      },
+      {
+        "command": "echos.viewPatterns",
+        "title": "View Detected Patterns",
+        "category": "Echos"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "echos-explorer",
+          "title": "Echos",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "echos-explorer": [
+        {
+          "id": "echos.playground",
+          "name": "Action Playground",
+          "type": "webview"
+        },
+        {
+          "id": "echos.agents",
+          "name": "Active Agents"
+        },
+        {
+          "id": "echos.timeline",
+          "name": "Recent Activity"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Echos",
+      "properties": {
+        "echos.daemonUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3434",
+          "description": "Echos daemon URL"
+        },
+        "echos.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically connect to daemon on startup"
+        },
+        "echos.showInlineApprovals": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show approval notifications in editor"
+        },
+        "echos.enableWorkflowRecorder": {
+          "type": "boolean",
+          "default": true,
+          "description": "🔥 NEW: Detect workflow patterns and suggest automation"
+        },
+        "echos.workflowRecorder.patternThreshold": {
+          "type": "number",
+          "default": 3,
+          "description": "Number of similar actions before suggesting automation"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run build",
+    "build": "tsup src/extension.ts --format cjs --external vscode --minify",
+    "dev": "tsup src/extension.ts --format cjs --external vscode --watch",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
+

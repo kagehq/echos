@@ -34,6 +34,14 @@ As agents become more capable, they'll need guardrails. Echos gives you:
 
 **Use Echos when:** You're ready to let an AI agent run autonomously, but want a safety net before it sends that email, deletes that file, or posts to production Slack.
 
+### "I don't have an agent yet. Should I care?"
+
+If you're currently using AI for **interactive coding** (Cursor, Claude, etc.) - you might not need Echos *yet*. 
+
+But if you're thinking about building your first autonomous agent (or already experimenting), Echos helps you ship with confidence. Start with our [examples/](./examples/) to see real agent patterns you can adapt.
+
+**🆕 NEW: VSCode Extension** - Test and control agents directly in your IDE! [Learn more →](./apps/vscode-extension/)
+
 ## Installation
 
 ```bash
@@ -100,6 +108,18 @@ node your-agent.js
 
 Then visit `http://localhost:3000` to see your agent's actions in real-time!
 
+### Use with VSCode Extension
+
+**Test and build agents directly in your IDE:**
+- **🔥 Workflow Recorder** - Detects patterns, suggests automation ("You've done this 3 times. Want to automate?")
+- **Action Playground** - Test policies without writing code
+- **Inline Approvals** - Approve/deny without leaving your editor
+- **Code Actions** - Right-click → Wrap with Echos / Convert to Agent
+- **Policy Editor** - Visual interface for managing rules
+- **Token Manager** - Real-time authorization control
+
+**Quick start:** `pnpm dev:daemon` then press `F5` in VSCode → [Full guide](./apps/vscode-extension/)
+
 ## Development
 
 ```bash
@@ -164,6 +184,7 @@ Apply via dashboard (`:3000/roles`) or `agent.applyRole({ template: "research_as
 - **Role Templates** - Pre-configured policies with hot-reload
 - **Token Management** - Time-limited authorizations with full lifecycle control
 - **Developer Tools** - Policy testing, template validation, webhook support, debug mode
+- **🆕 VSCode Extension** - Test, monitor, and control agents directly in your IDE
 - **Security** - Regex-based policies with ReDoS protection, JWT auth, timeout protection
 - **Local-First** - All data stays on your machine, NDJSON export for compliance
 
@@ -185,6 +206,7 @@ ECHOS_DEBUG=1          # Verbose logging
 ## More
 
 - **[examples/](./examples/)** - Usage examples and patterns
+- **[VSCode Extension](./apps/vscode-extension/)** - IDE integration
 
 ## License
 
