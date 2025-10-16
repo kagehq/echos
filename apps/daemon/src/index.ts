@@ -10,13 +10,60 @@ import {
   getResolvedPolicyRegex,
   getRoleAssignment,
   listRoleAssignments,
-  type ResolvedPolicy
+  type ResolvedPolicy,
+  type PolicyLimits
 } from "./policies.js";
 
 type Decision = "allow"|"block"|"ask";
-type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean };
-type TokenRecord = { token:string; agent:string; scopes:string[]; expiresAt:number; status:"active"|"paused"|"revoked" };
-type EventMsg = { id:string; ts:number; agent:string; intent:string; target?:string; meta?:any; preview?:string; tokenAttached?:boolean; request?:any; response?:any; metadata?:any; policy?: PolicyMatch };
+type SpendLimitInfo = { timeframe: "daily" | "monthly"; category: "llm" | "total"; value: number; spent: number; remaining: number };
+type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean; limit?: SpendLimitInfo };
+type TokenRecord = { 
+  token:string; 
+  agent:string; 
+  scopes:string[]; 
+  expiresAt:number; 
+  status:"active"|"paused"|"revoked";
+  createdBy?: string;
+  createdReason?: string;
+  customerId?: string;
+  subscriptionId?: string;
+};
+
+type EventMsg = { 
+  id:string; 
+  ts:number; 
+  agent:string; 
+  intent:string; 
+  target?:string; 
+  meta?:any; 
+  preview?:string; 
+  tokenAttached?:boolean; 
+  request?:any; 
+  response?:any; 
+  metadata?:any; 
+  policy?: PolicyMatch; 
+  costUsd?: number;
+  // Enhanced business context
+  customerId?: string;
+  subscriptionId?: string;
+  feature?: string;
+  environment?: string;
+  // Enhanced audit trail
+  userAgent?: string;
+  ipAddress?: string;
+  sessionId?: string;
+  correlationId?: string;
+  // Performance metrics
+  duration?: number;
+  tokensUsed?: number;
+  modelVersion?: string;
+  latency?: number;
+  // Error context
+  errorCode?: string;
+  errorStack?: string;
+  retryCount?: number;
+  errorContext?: any;
+};
 type TimelineEntry = EventMsg | { type: string; ts: number; action?: string; token?: string; [key: string]: any };
 
 const app = createApp();
@@ -32,6 +79,95 @@ const SECRET_KEY = createSecretKey(process.env.ECHOS_SECRET ? Buffer.from(proces
 const now = ()=>Date.now();
 const broadcast = (msg:any)=>{ const s=JSON.stringify(msg); for(const c of clients){ try{ c.send(s);}catch{} } };
 const safeHash = (token:string)=>"sha256:"+createHash("sha256").update(token).digest("hex");
+
+type SpendTracker = {
+  dayKey: string;
+  monthKey: string;
+  daily: { llm: number; total: number };
+  monthly: { llm: number; total: number };
+};
+type SpendSnapshot = {
+  daily: { llmUsd: number; totalUsd: number };
+  monthly: { llmUsd: number; totalUsd: number };
+};
+const SPEND = new Map<string, SpendTracker>();
+
+const getDayKey = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+const getMonthKey = (ts: number) => {
+  const d = new Date(ts);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
+function ensureTracker(agent: string, ts: number): SpendTracker {
+  const dayKey = getDayKey(ts);
+  const monthKey = getMonthKey(ts);
+  const tracker =
+    SPEND.get(agent) ??
+    {
+      dayKey,
+      monthKey,
+      daily: { llm: 0, total: 0 },
+      monthly: { llm: 0, total: 0 }
+    };
+
+  if (tracker.dayKey !== dayKey) {
+    tracker.dayKey = dayKey;
+    tracker.daily.llm = 0;
+    tracker.daily.total = 0;
+  }
+  if (tracker.monthKey !== monthKey) {
+    tracker.monthKey = monthKey;
+    tracker.monthly.llm = 0;
+    tracker.monthly.total = 0;
+  }
+
+  SPEND.set(agent, tracker);
+  return tracker;
+}
+
+function addSpend(agent: string, amount: number, ts: number, category: "llm" | "general") {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const tracker = ensureTracker(agent, ts);
+  tracker.daily.total += amount;
+  tracker.monthly.total += amount;
+  if (category === "llm") {
+    tracker.daily.llm += amount;
+    tracker.monthly.llm += amount;
+  }
+}
+
+function getSpend(agent: string, ts: number = now()): SpendSnapshot {
+  if (!SPEND.has(agent)) {
+    const tracker = ensureTracker(agent, ts);
+    return {
+      daily: { llmUsd: tracker.daily.llm, totalUsd: tracker.daily.total },
+      monthly: { llmUsd: tracker.monthly.llm, totalUsd: tracker.monthly.total }
+    };
+  }
+  const tracker = ensureTracker(agent, ts);
+  return {
+    daily: { llmUsd: tracker.daily.llm, totalUsd: tracker.daily.total },
+    monthly: { llmUsd: tracker.monthly.llm, totalUsd: tracker.monthly.total }
+  };
+}
+
+function extractCostUsd(event: EventMsg): number | null {
+  const candidates = [
+    event.costUsd,
+    event.metadata?.costUsd,
+    event.metadata?.cost_usd,
+    event.metadata?.cost?.usd,
+    event.meta?.costUsd,
+    event.meta?.cost_usd,
+    event.meta?.cost?.usd
+  ];
+  for (const val of candidates) {
+    if (typeof val === "number" && Number.isFinite(val)) {
+      return val;
+    }
+  }
+  return null;
+}
 
 // Debug logging helper
 const debug = (...args: any[]) => {
@@ -125,7 +261,7 @@ app.use(eventHandler((req) => {
 }));
 
 // Enhanced error context helper
-function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, source?: string): string {
+function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, source?: string, policyMatch?: PolicyMatch): string {
   const parts = [];
   
   if (status === 'block') {
@@ -133,6 +269,17 @@ function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, 
     if (matchedRule) parts.push(`Matched rule: "${matchedRule}"`);
     if (source) parts.push(`Source: ${source}`);
     parts.push(`Agent "${e.agent}" attempted: ${e.intent}${e.target ? ` → ${e.target}` : ''}`);
+
+    if (policyMatch?.limit) {
+      const { timeframe, category, value, spent, remaining } = policyMatch.limit;
+      const timeframeLabel = timeframe === "daily" ? "daily" : "monthly";
+      const categoryLabel = category === "llm" ? "LLM" : "AI";
+      const formattedSpent = spent.toFixed(2);
+      const formattedLimit = value.toFixed(2);
+      const formattedRemaining = Math.max(0, remaining).toFixed(2);
+      parts.push(`${categoryLabel} ${timeframeLabel} spend ${spent >= value ? "limit reached" : "limit threshold"}`);
+      parts.push(`Spent $${formattedSpent} of $${formattedLimit} (remaining $${formattedRemaining})`);
+    }
   } else if (status === 'ask') {
     parts.push(`User approval required`);
     if (matchedRule) parts.push(`Matched rule: "${matchedRule}"`);
@@ -170,13 +317,13 @@ app.use(eventHandler(async (req) => {
   let status:Decision = "block"; // SECURE DEFAULT: block if no policy matches or evaluation fails
   let matchedRule: string | null = null;
   let source: string | undefined = undefined;
+  let limitInfo: SpendLimitInfo | undefined;
+  const roleAssignment = getRoleAssignment(e.agent);
+  const rolePol = getResolvedPolicyRegex(e.agent);
+  const policyToUse = rolePol || POLICY;
+  const policySource = rolePol ? "role" : "base";
   
   try {
-    // Check if agent has a role-applied policy
-    const rolePol = getResolvedPolicyRegex(e.agent);
-    const policyToUse = rolePol || POLICY;
-    const policySource = rolePol ? "role" : "base";
-    
     // Evaluate policies with ReDoS protection
     if ((matchedRule = findMatch(policyToUse.block, sig))) {
       status = "block";
@@ -195,16 +342,89 @@ app.use(eventHandler(async (req) => {
     source = "evaluation_failed";
   }
   
+  // Enforce spend limits if defined in the policy
+  if (status !== "block") {
+    const limits: PolicyLimits | undefined = roleAssignment?.policy?.limits;
+    if (limits) {
+      const spend = getSpend(e.agent);
+      const pendingCost = extractCostUsd(e) ?? 0;
+
+      if (e.intent === "llm.chat") {
+        if (typeof limits.llm_daily_usd === "number" && Number.isFinite(limits.llm_daily_usd)) {
+          const projected = spend.daily.llmUsd + pendingCost;
+          const remaining = Math.max(0, limits.llm_daily_usd - projected);
+          if (projected >= limits.llm_daily_usd) {
+            limitInfo = {
+              timeframe: "daily",
+              category: "llm",
+              value: limits.llm_daily_usd,
+              spent: projected,
+              remaining
+            };
+          }
+        }
+        if (!limitInfo && typeof limits.llm_monthly_usd === "number" && Number.isFinite(limits.llm_monthly_usd)) {
+          const projected = spend.monthly.llmUsd + pendingCost;
+          const remaining = Math.max(0, limits.llm_monthly_usd - projected);
+          if (projected >= limits.llm_monthly_usd) {
+            limitInfo = {
+              timeframe: "monthly",
+              category: "llm",
+              value: limits.llm_monthly_usd,
+              spent: projected,
+              remaining
+            };
+          }
+        }
+      }
+
+      if (!limitInfo && typeof limits.ai_daily_usd === "number" && Number.isFinite(limits.ai_daily_usd)) {
+        const projected = spend.daily.totalUsd + pendingCost;
+        const remaining = Math.max(0, limits.ai_daily_usd - projected);
+        if (projected >= limits.ai_daily_usd) {
+          limitInfo = {
+            timeframe: "daily",
+            category: "total",
+            value: limits.ai_daily_usd,
+            spent: projected,
+            remaining
+          };
+        }
+      }
+
+      if (!limitInfo && typeof limits.ai_monthly_usd === "number" && Number.isFinite(limits.ai_monthly_usd)) {
+        const projected = spend.monthly.totalUsd + pendingCost;
+        const remaining = Math.max(0, limits.ai_monthly_usd - projected);
+        if (projected >= limits.ai_monthly_usd) {
+          limitInfo = {
+            timeframe: "monthly",
+            category: "total",
+            value: limits.ai_monthly_usd,
+            spent: projected,
+            remaining
+          };
+        }
+      }
+    }
+  }
+
+  if (limitInfo) {
+    status = "block";
+    matchedRule = `limit:${limitInfo.category === "llm" ? "llm" : "ai"}_${limitInfo.timeframe}`;
+    source = "limits";
+  }
+
   policyMatch = { 
     status, 
     rule: matchedRule || undefined, 
     source,
-    byToken: false 
+    byToken: false,
+    limit: limitInfo
   };
   
   // Build error context for better messages
-  const errorContext = buildErrorContext(e, status, matchedRule || undefined, source);
-  debug('Policy decision:', { status, rule: matchedRule, source, context: errorContext });
+  const errorContext = buildErrorContext(e, status, matchedRule || undefined, source, policyMatch);
+  debug('Policy decision:', { status, rule: matchedRule, source, limit: limitInfo, context: errorContext });
   
   if (status === "ask") {
     const msg = { type:"ask", event:{ ...e, policy: policyMatch }, ts: now() };
@@ -260,16 +480,53 @@ app.use(eventHandler(async (req)=>{
 
 // Tokens lifecycle
 app.use("/tokens/issue", eventHandler(async (req)=>{
-  const b = await readBody<{agent:string; scopes:string[]; durationSec:number; reason?:string}>(req);
+  const b = await readBody<{
+    agent:string; 
+    scopes:string[]; 
+    durationSec:number; 
+    reason?:string;
+    createdBy?: string;
+    createdReason?: string;
+    customerId?: string;
+    subscriptionId?: string;
+  }>(req);
+  
   const expAt = now() + Math.max(60, b.durationSec||0)*1000;
   const jwt = await new jose.SignJWT({ agent: b.agent, scopes: b.scopes, exp: Math.floor(expAt/1000) }).setProtectedHeader({ alg:"HS256" }).sign(SECRET_KEY);
-  const rec: TokenRecord = { token: jwt, agent: b.agent, scopes: b.scopes, expiresAt: expAt, status:"active" };
+  
+  const rec: TokenRecord = { 
+    token: jwt, 
+    agent: b.agent, 
+    scopes: b.scopes, 
+    expiresAt: expAt, 
+    status:"active",
+    createdBy: b.createdBy,
+    createdReason: b.createdReason || b.reason,
+    customerId: b.customerId,
+    subscriptionId: b.subscriptionId
+  };
+  
   TOKENS.set(jwt, rec);
-  const msg = { type:"token", action:"issued", token: jwt, ts: now() };
+  const msg = { 
+    type:"token", 
+    action:"issued", 
+    token: jwt, 
+    ts: now(),
+    createdBy: b.createdBy,
+    createdReason: b.createdReason || b.reason,
+    customerId: b.customerId,
+    subscriptionId: b.subscriptionId
+  };
   TIMELINE.unshift(msg);
   await broadcast(msg);
   await notifyWebhooks(msg);
-  debug('Token issued:', { agent: b.agent, scopes: b.scopes, durationSec: b.durationSec });
+  debug('Token issued:', { 
+    agent: b.agent, 
+    scopes: b.scopes, 
+    durationSec: b.durationSec,
+    createdBy: b.createdBy,
+    customerId: b.customerId
+  });
   return { token: rec };
 }));
 app.use("/tokens/revoke", eventHandler(async (req)=>{ const { token } = await readBody<{token:string}>(req); const t=TOKENS.get(token); if(t){ t.status="revoked"; TOKENS.set(token,t); const msg = { type:"token", action:"revoked", token, ts: now() }; TIMELINE.unshift(msg); await broadcast(msg); } return { ok:true }; }));
@@ -364,7 +621,8 @@ app.use("/policy/test", eventHandler(async (req) => {
     { id: 'test', agent: body.agent, intent: body.intent, target: body.target, ts: now() }, 
     status, 
     matchedRule || undefined, 
-    source
+    source,
+    undefined
   );
   
   return { 
@@ -528,7 +786,8 @@ app.use(eventHandler(async (req)=>{
     appliedAt: assignment.appliedAt,
     allow: assignment.policy.allow, 
     ask: assignment.policy.ask, 
-    block: assignment.policy.block 
+    block: assignment.policy.block,
+    limits: assignment.policy.limits
   };
 }));
 
@@ -541,12 +800,52 @@ app.use("/roles", eventHandler(async (req)=>{
 // Events & timeline
 app.use("/events", eventHandler(async (req)=>{ 
   if (req.method !== 'POST') return;
-  const e = await readBody<EventMsg>(req); 
-  const msg = { type:"event", event:e, ts: e.ts };
+  const e = await readBody<EventMsg>(req);
+  const costUsd = extractCostUsd(e);
+  
+  // Extract request metadata for audit trail
+  const userAgent = req.headers['user-agent'] as string;
+  const ipAddress = req.headers['x-forwarded-for'] as string || 
+                   req.headers['x-real-ip'] as string || 
+                   req.connection?.remoteAddress || 
+                   'unknown';
+  
+  // Get agent's spend limits from role assignment
+  const roleAssignment = getRoleAssignment(e.agent);
+  const agentSpendLimits = roleAssignment?.policy?.limits;
+
+  const eventRecord = {
+    ...e,
+    costUsd: costUsd !== null ? costUsd : e.costUsd,
+    userAgent,
+    ipAddress,
+    // Add correlation ID if not present
+    correlationId: e.correlationId || `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    // Include agent's spend limits
+    agentSpendLimits
+  };
+
+  if (costUsd !== null) {
+    if (e.intent === "llm.chat") {
+      addSpend(e.agent, costUsd, e.ts ?? now(), "llm");
+    } else {
+      addSpend(e.agent, costUsd, e.ts ?? now(), "general");
+    }
+  }
+
+  const msg = { type:"event", event: eventRecord, ts: eventRecord.ts };
   TIMELINE.unshift(msg); 
   await broadcast(msg);
   await notifyWebhooks(msg);
-  debug('Event recorded:', { agent: e.agent, intent: e.intent, target: e.target });
+  debug('Event recorded:', { 
+    agent: e.agent, 
+    intent: e.intent, 
+    target: e.target, 
+    costUsd,
+    customerId: e.customerId,
+    feature: e.feature,
+    environment: e.environment
+  });
   return { ok:true };
 }));
 
@@ -556,6 +855,37 @@ app.use("/timeline.ndjson", eventHandler((req)=>{
   setResponseHeader(req, "Content-Type", "application/x-ndjson");
   setResponseHeader(req, "Content-Disposition", `attachment; filename="echos-timeline-${now()}.ndjson"`);
   return ndjson + '\n';
+}));
+
+app.use("/metrics/llm", eventHandler(async (req) => {
+  if (req.method !== "GET") return;
+
+  const ts = now();
+  const summary = Array.from(SPEND.keys()).map((agent) => {
+    const spend = getSpend(agent, ts);
+    const limits = getRoleAssignment(agent)?.policy?.limits;
+    return {
+      agent,
+      dailyUsd: spend.daily.totalUsd,
+      monthlyUsd: spend.monthly.totalUsd,
+      llmDailyUsd: spend.daily.llmUsd,
+      llmMonthlyUsd: spend.monthly.llmUsd,
+      limits: limits ?? null
+    };
+  });
+
+  const totals = summary.reduce(
+    (acc, cur) => {
+      acc.dailyUsd += cur.dailyUsd;
+      acc.monthlyUsd += cur.monthlyUsd;
+      acc.llmDailyUsd += cur.llmDailyUsd ?? 0;
+      acc.llmMonthlyUsd += cur.llmMonthlyUsd ?? 0;
+      return acc;
+    },
+    { dailyUsd: 0, monthlyUsd: 0, llmDailyUsd: 0, llmMonthlyUsd: 0 }
+  );
+
+  return { summary, totals };
 }));
 
 app.use("/timeline", eventHandler(async (req)=>{

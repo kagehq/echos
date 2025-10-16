@@ -5,7 +5,8 @@ const ENDPOINT = process.env.ECHOS_ENDPOINT ?? "http://127.0.0.1:3434";
 const DEBUG_MODE = process.env.ECHOS_DEBUG === "1";
 
 type Decision = "allow"|"block"|"ask";
-type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean };
+type SpendLimitInfo = { timeframe: "daily" | "monthly"; category: "llm" | "total"; value: number; spent: number; remaining: number };
+type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean; limit?: SpendLimitInfo };
 export type EchosToken = { token:string; expiresAt:number; scopes:string[]; status:"active"|"paused"|"revoked" };
 
 // Debug logging helper

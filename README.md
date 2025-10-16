@@ -23,12 +23,99 @@ Echos intercepts actions *before* they happen, giving you policy-based control a
 # Try the demo
 git clone https://github.com/kagehq/echos.git
 cd echos
-pnpm install && pnpm build:all && pnpm demo
+
+# Install the embedded Node runtime (once per machine)
+pnpm run setup:node
+
+# Load the local toolchain for the current shell
+source scripts/env.sh
+
+# Install dependencies and run the demo
+pnpm install
+pnpm build:all
+pnpm demo
 ```
 
 Visit `http://localhost:3000` to see the dashboard.
 
-### Use in Your Project
+### Development
+
+Use two terminals (after `source scripts/env.sh` in each):
+
+```bash
+pnpm dev:daemon    # http://127.0.0.1:3434
+pnpm dev:dashboard # http://localhost:3000
+```
+
+Or start both services together:
+
+```bash
+pnpm dev:stack
+```
+
+## Track AI Spend & Enforce Limits
+
+Include the dollar cost on any `llm.chat` event to unlock spend tracking:
+
+```ts
+await agent.emit(
+  "llm.chat",
+  "gpt-4",
+  { prompt: "Analyze sales data" },
+  undefined,
+  undefined,
+  {
+    costUsd: 0.75,
+    provider: "openai",
+  }
+);
+```
+
+Add spend limits to policies:
+
+```yaml
+name: Research Assistant
+allow:
+  - "llm.chat:*"
+limits:
+  ai_daily_usd: 10     # Block after $10/day
+  ai_monthly_usd: 100  # Block after $100/month
+```
+
+When limits are exceeded, the agent gets blocked automatically.
+
+### Per-User Spend Caps
+
+For SaaS applications, create users with individual spend limits:
+
+```typescript
+// Create a user with spend caps
+const user = await createUser({
+  userId: 'customer-123',
+  dailyLimit: 10.00,
+  monthlyLimit: 200.00,
+  scopes: ['llm.chat', 'http.request']
+});
+
+// User gets API key: user.token
+// Automatic spend enforcement: ✅
+```
+
+**API Endpoints:**
+- `POST /roles/apply` - Assign policy template to user
+- `POST /tokens/issue` - Issue API key for user  
+- `GET /metrics/llm` - Monitor spend per user
+- `POST /tokens/revoke` - Revoke user's API key
+
+**Built-in Templates:**
+- `capped_user` - Individual user with spend limits
+- `research_assistant` - Read-only access
+- `customer_support` - Limited permissions with approval
+- `unrestricted` - Full access (admin only)
+
+See [`examples/user-management.ts`](./examples/user-management.ts) and [`examples/cloudflare-integration.ts`](./examples/cloudflare-integration.ts) for complete implementations.
+
+## Use in Your Project
 
 ```bash
 npm install @echoshq/sdk
@@ -46,16 +133,6 @@ Run the daemon in your Echos repo:
 pnpm dev:daemon    # Port 3434
 pnpm dev:dashboard # Port 3000
 ```
-
-## VSCode Extension
-
-**Build agents directly in your IDE:**
-- **Workflow Recorder** - Detects patterns, suggests automation
-- **Action Playground** - Test policies without writing code
-- **Inline Approvals** - Approve/deny in your editor
-- **Code Actions** - Right-click → Wrap with Echos / Convert to Agent
-
-[Install guide →](./apps/vscode-extension/)
 
 ## How It Works
 
@@ -83,14 +160,23 @@ Apply via dashboard or SDK:
 agent.applyRole({ template: "research_assistant" });
 ```
 
-**Built-in templates:** `research_assistant`, `customer_support`, `internal_notifier`, `unrestricted`
+## VSCode Extension
+
+**Build agents directly in your IDE:**
+- **Workflow Recorder** - Detects patterns, suggests automation
+- **Action Playground** - Test policies without writing code
+- **Inline Approvals** - Approve/deny in your editor
+- **Code Actions** - Right-click → Wrap with Echos / Convert to Agent
+
+[Install guide →](./apps/vscode-extension/)
 
 ## Features
 
 - **Real-time monitoring** - Live feed of all agent actions
 - **Policy-based control** - Allow/ask/block rules with templates
 - **Human-in-the-loop** - Approve sensitive actions before they run
-- **Token management** - Time-limited authorizations
+- **Spend tracking & limits** - Per-user cost monitoring with automatic enforcement
+- **Programmatic user management** - Create users, issue API keys, set spend caps
 - **VSCode extension** - Complete IDE integration
 - **Local-first** - All data stays on your machine
 - **Audit trail** - Full history with NDJSON export

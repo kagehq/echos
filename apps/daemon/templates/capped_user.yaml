@@ -1,0 +1,20 @@
+name: Capped User
+version: 1
+description: Individual user with capped API spend limits
+allow:
+  - llm.chat:*
+  - http.request:GET*
+  - http.request:POST*
+  - fs.read:*
+  - fs.write:*
+ask:
+  - email.send:*
+  - slack.post:*
+block:
+  - fs.delete:*
+  - email.send:*@competitor.com
+limits:
+  ai_daily_usd: 5.00      # $5/day limit
+  ai_monthly_usd: 100.00   # $100/month limit
+  llm_daily_usd: 3.00     # $3/day on LLM specifically
+  llm_monthly_usd: 50.00   # $50/month on LLM specifically

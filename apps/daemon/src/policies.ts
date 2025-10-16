@@ -4,6 +4,14 @@ import { join, resolve } from "node:path";
 import YAML from "yaml";
 import chokidar from "chokidar";
 
+export type PolicyLimits = {
+  ai_daily_usd?: number;
+  ai_monthly_usd?: number;
+  llm_daily_usd?: number;
+  llm_monthly_usd?: number;
+  [key: string]: number | undefined;
+};
+
 export type RawPolicy = {
   name?: string;
   version?: number;
@@ -11,11 +19,16 @@ export type RawPolicy = {
   allow?: string[];
   ask?: string[];
   block?: string[];
-  limits?: any;
+  limits?: PolicyLimits;
   token?: { default_ttl_sec?: number };
 };
 
-export type ResolvedPolicy = Required<Pick<RawPolicy, "allow" | "ask" | "block">>;
+export type ResolvedPolicy = {
+  allow: string[];
+  ask: string[];
+  block: string[];
+  limits?: PolicyLimits;
+};
 
 export type RoleAssignment = {
   agentId: string;
@@ -46,7 +59,27 @@ function mergePolicy(base: RawPolicy = {}, ov: RawPolicy = {}): ResolvedPolicy {
   const allow = [...(base.allow || []), ...(ov.allow || [])];
   const ask = [...(base.ask || []), ...(ov.ask || [])];
   const block = [...(base.block || []), ...(ov.block || [])];
-  return { allow, ask, block };
+
+  const limits: PolicyLimits | undefined = (() => {
+    const merged = { ...(base.limits || {}) };
+    if (ov.limits) {
+      for (const [key, value] of Object.entries(ov.limits)) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          merged[key] = value;
+        } else if (value === undefined) {
+          delete merged[key];
+        }
+      }
+    }
+    for (const [key, value] of Object.entries(merged)) {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        delete merged[key];
+      }
+    }
+    return Object.keys(merged).length ? merged : undefined;
+  })();
+
+  return { allow, ask, block, limits };
 }
 
 export async function ensureTemplatesScaffold() {
@@ -210,6 +243,7 @@ export function listTemplates() {
     allow: t.allow ?? [],
     ask: t.ask ?? [],
     block: t.block ?? [],
+    limits: t.limits ?? undefined,
   }));
 }
 

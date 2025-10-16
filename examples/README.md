@@ -40,6 +40,33 @@ Showcases advanced developer tools for testing and debugging policies.
 tsx examples/developer-tools.ts
 ```
 
+### 👥 User Management (`user-management.ts`)
+Programmatic user creation with capped spend limits - perfect for SaaS applications.
+
+**Features**: Create users with spend caps, issue API keys, monitor usage, enforce limits
+
+```bash
+tsx examples/user-management.ts
+```
+
+### ☁️ Cloudflare Integration (`cloudflare-integration.ts`)
+Integration with Cloudflare Durable Objects for per-user API key management.
+
+**Features**: 1 user = 1 Minecraft server = 1 durable object with spend capping
+
+```bash
+tsx examples/cloudflare-integration.ts
+```
+
+### 📊 Enhanced Metadata (`enhanced-metadata.ts`)
+Comprehensive demonstration of all enhanced metadata fields for production tracking.
+
+**Features**: Business context, performance metrics, audit trail, error tracking, correlation IDs
+
+```bash
+tsx examples/enhanced-metadata.ts
+```
+
 ### 🤖 RecruitBot (`recruit-bot.ts`)
 Automated candidate outreach with email drafting and calendar scheduling.
 

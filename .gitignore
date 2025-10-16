@@ -5,6 +5,8 @@ dist
 .env
 *.log
 .DS_Store
+.tools
+.tmp
 
 # Test files (keep tests/ directory but ignore temp test files in root)
 test-*.mjs

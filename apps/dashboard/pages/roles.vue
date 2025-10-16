@@ -265,6 +265,35 @@ if (process.client) {
                   </div>
                 </div>
               </div>
+              
+              <!-- Spend Limits -->
+              <div v-if="resolved?.limits" class="mt-6 pt-4 border-t border-gray-500/20">
+                <div class="text-xs text-purple-300 uppercase tracking-wide mb-3">Spend Limits</div>
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div class="space-y-2">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">Daily Limits</div>
+                    <div v-if="resolved.limits.ai_daily_usd" class="flex items-center justify-between">
+                      <span class="text-xs text-gray-400">Total AI:</span>
+                      <span class="text-xs text-purple-300 font-mono">${{ resolved.limits.ai_daily_usd.toFixed(2) }}</span>
+                    </div>
+                    <div v-if="resolved.limits.llm_daily_usd" class="flex items-center justify-between">
+                      <span class="text-xs text-gray-400">LLM Only:</span>
+                      <span class="text-xs text-purple-300 font-mono">${{ resolved.limits.llm_daily_usd.toFixed(2) }}</span>
+                    </div>
+                  </div>
+                  <div class="space-y-2">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">Monthly Limits</div>
+                    <div v-if="resolved.limits.ai_monthly_usd" class="flex items-center justify-between">
+                      <span class="text-xs text-gray-400">Total AI:</span>
+                      <span class="text-xs text-purple-300 font-mono">${{ resolved.limits.ai_monthly_usd.toFixed(2) }}</span>
+                    </div>
+                    <div v-if="resolved.limits.llm_monthly_usd" class="flex items-center justify-between">
+                      <span class="text-xs text-gray-400">LLM Only:</span>
+                      <span class="text-xs text-purple-300 font-mono">${{ resolved.limits.llm_monthly_usd.toFixed(2) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Active Roles -->
@@ -303,6 +332,10 @@ if (process.client) {
                     <div class="flex items-center gap-1">
                       <span class="text-red-500">✗</span>
                       <span class="text-gray-500">{{ role.policy.block.length }} block</span>
+                    </div>
+                    <div v-if="role.policy.limits" class="flex items-center gap-1">
+                      <UIcon name="i-heroicons-currency-dollar" class="text-purple-300" />
+                      <span class="text-gray-500">spend limits</span>
                     </div>
                   </div>
                 </div>

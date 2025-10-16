@@ -518,7 +518,10 @@ async function resume(t:any){
               <div v-else-if="m.type==='roleApplied'" class="w-20 shrink-0 text-white">APPLIED</div>
               
               <!-- Path/Target -->
-              <div v-if="m.type==='event'" class="flex-1 text-gray-400">{{ m.event.target || m.event.intent }}</div>
+              <div v-if="m.type==='event'" class="flex-1 text-gray-400">
+                {{ m.event.target || m.event.intent }}
+                <UIcon v-if="m.event?.agentSpendLimits" name="i-heroicons-currency-dollar" class="text-purple-300 ml-2" />
+              </div>
               <div v-else-if="m.type==='ask'" class="flex-1 text-gray-400">{{ m.event.target || m.event.intent }}</div>
               <div v-else-if="m.type==='decision'" class="flex-1">
                 <span :class="m.payload?.status === 'allow' ? 'text-green-300' : 'text-red-400'">
@@ -527,7 +530,10 @@ async function resume(t:any){
                 <span v-if="m.payload?.token" class="text-gray-400 ml-2">- token granted</span>
               </div>
               <div v-else-if="m.type==='token'" class="flex-1 text-gray-400">{{ m.token?.slice(0, 40) }}...</div>
-              <div v-else-if="m.type==='roleApplied'" class="flex-1 text-gray-400">{{ m.agent }} → {{ m.template }}</div>
+              <div v-else-if="m.type==='roleApplied'" class="flex-1 text-gray-400">
+                {{ m.agent }} → {{ m.template }}
+                <UIcon v-if="m.policy?.limits" name="i-heroicons-currency-dollar" class="text-purple-300 ml-2" />
+              </div>
               
               <!-- Expand indicator -->
               <div class="w-4 shrink-0 text-gray-500">
@@ -669,6 +675,29 @@ async function resume(t:any){
                     <span class="text-gray-500">Overrides Applied:</span>
                     <pre class="text-gray-300 font-mono bg-black/30 p-2 rounded overflow-x-auto text-xs">{{ JSON.stringify(m.overrides, null, 2) }}</pre>
                   </div>
+                  
+                  <!-- Spend Limits -->
+                  <div v-if="m.policy?.limits" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Spend Limits:</span>
+                    <div class="ml-4 space-y-1">
+                      <div v-if="m.policy.limits.ai_daily_usd" class="flex gap-2">
+                        <span class="text-gray-500">Daily AI:</span>
+                        <span class="text-purple-300 font-mono">${{ m.policy.limits.ai_daily_usd.toFixed(2) }}</span>
+                      </div>
+                      <div v-if="m.policy.limits.llm_daily_usd" class="flex gap-2">
+                        <span class="text-gray-500">Daily LLM:</span>
+                        <span class="text-purple-300 font-mono">${{ m.policy.limits.llm_daily_usd.toFixed(2) }}</span>
+                      </div>
+                      <div v-if="m.policy.limits.ai_monthly_usd" class="flex gap-2">
+                        <span class="text-gray-500">Monthly AI:</span>
+                        <span class="text-purple-300 font-mono">${{ m.policy.limits.ai_monthly_usd.toFixed(2) }}</span>
+                      </div>
+                      <div v-if="m.policy.limits.llm_monthly_usd" class="flex gap-2">
+                        <span class="text-gray-500">Monthly LLM:</span>
+                        <span class="text-purple-300 font-mono">${{ m.policy.limits.llm_monthly_usd.toFixed(2) }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </template>
                 
                 <!-- Event-specific fields (for type: "event" or type: "ask") -->
@@ -765,6 +794,29 @@ async function resume(t:any){
                       <div v-if="m.event.policy.source && !m.event.policy.byToken" class="flex gap-2">
                         <span class="text-gray-500">Rule Source:</span>
                         <span class="text-gray-300 font-mono">{{ m.event.policy.source }} policy</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Agent Spend Limits -->
+                  <div v-if="m.event?.agentSpendLimits" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Agent Spend Limits:</span>
+                    <div class="ml-4 space-y-1">
+                      <div v-if="m.event.agentSpendLimits.ai_daily_usd" class="flex gap-2">
+                        <span class="text-gray-500">Daily AI:</span>
+                        <span class="text-purple-300 font-mono">${{ m.event.agentSpendLimits.ai_daily_usd.toFixed(2) }}</span>
+                      </div>
+                      <div v-if="m.event.agentSpendLimits.llm_daily_usd" class="flex gap-2">
+                        <span class="text-gray-500">Daily LLM:</span>
+                        <span class="text-purple-300 font-mono">${{ m.event.agentSpendLimits.llm_daily_usd.toFixed(2) }}</span>
+                      </div>
+                      <div v-if="m.event.agentSpendLimits.ai_monthly_usd" class="flex gap-2">
+                        <span class="text-gray-500">Monthly AI:</span>
+                        <span class="text-purple-300 font-mono">${{ m.event.agentSpendLimits.ai_monthly_usd.toFixed(2) }}</span>
+                      </div>
+                      <div v-if="m.event.agentSpendLimits.llm_monthly_usd" class="flex gap-2">
+                        <span class="text-gray-500">Monthly LLM:</span>
+                        <span class="text-purple-300 font-mono">${{ m.event.agentSpendLimits.llm_monthly_usd.toFixed(2) }}</span>
                       </div>
                     </div>
                   </div>

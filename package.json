@@ -16,7 +16,9 @@
     "demo": "node packages/demo/dist/index.js",
     "test": "node tests/comprehensive.test.mjs",
     "prep": "pnpm -r install && turbo prune --scope=@echos/demo --docker",
-    "package:extension": "pnpm -C apps/vscode-extension package"
+    "package:extension": "pnpm -C apps/vscode-extension package",
+    "setup:node": "./scripts/setup-node.sh",
+    "dev:stack": "bash ./scripts/dev-stack.sh"
   },
   "devDependencies": {
     "turbo": "^2.0.0"

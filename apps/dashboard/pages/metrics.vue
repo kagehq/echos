@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { useDaemonApi } from '~/composables/useDaemonApi';
@@ -27,6 +27,18 @@ const { $ws } = useNuxtApp() as any;
 const refreshing = ref(false);
 const timeRange = ref('1h'); // 1h, 24h, 7d, 30d
 const events = ref<any[]>([]);
+const spendData = ref<{
+  summary: Array<{
+    agent: string;
+    dailyUsd: number;
+    monthlyUsd: number;
+    llmDailyUsd?: number;
+    llmMonthlyUsd?: number;
+    limits: any;
+  }>;
+  totals: { dailyUsd: number; monthlyUsd: number; llmDailyUsd: number; llmMonthlyUsd: number };
+} | null>(null);
+const spendLoading = ref(false);
 
 // Metrics calculations
 const metrics = computed(() => {
@@ -75,6 +87,17 @@ const metrics = computed(() => {
   };
 });
 
+const spendAgents = computed(() => {
+  const summary = spendData.value?.summary ?? [];
+  return [...summary].sort((a, b) => b.monthlyUsd - a.monthlyUsd);
+});
+
+const spendTotals = computed(() => ({
+  dailyUsd: spendData.value?.totals.dailyUsd ?? 0,
+  monthlyUsd: spendData.value?.totals.monthlyUsd ?? 0,
+  llmDailyUsd: spendData.value?.totals.llmDailyUsd ?? 0,
+  llmMonthlyUsd: spendData.value?.totals.llmMonthlyUsd ?? 0
+}));
 // Top intents
 const topIntents = computed(() => {
   if (!events.value) return [];
@@ -185,6 +208,24 @@ const chartOptions = {
   }
 };
 
+const fetchSpendMetrics = async () => {
+  try {
+    spendLoading.value = true;
+    const result = await request<{ summary: any[]; totals: { dailyUsd: number; monthlyUsd: number; llmDailyUsd: number; llmMonthlyUsd: number } }>('/metrics/llm');
+    if (result) {
+      const summary = Array.isArray(result.summary) ? result.summary : [];
+      spendData.value = {
+        summary,
+        totals: result.totals || { dailyUsd: 0, monthlyUsd: 0, llmDailyUsd: 0, llmMonthlyUsd: 0 }
+      };
+    }
+  } catch (error) {
+    console.error('Failed to fetch AI spend metrics:', error);
+  } finally {
+    spendLoading.value = false;
+  }
+};
+
 const refresh = async () => {
   refreshing.value = true;
   try {
@@ -197,6 +238,7 @@ const refresh = async () => {
           localStorage.setItem('timeline', JSON.stringify(events.value));
         }
       })(),
+      fetchSpendMetrics(),
       new Promise(resolve => setTimeout(resolve, 500))
     ]);
   } catch (e) {
@@ -234,10 +276,16 @@ onMounted(async () => {
           events.value = [data, ...events.value];
           // Update localStorage
           localStorage.setItem('timeline', JSON.stringify(events.value));
+
+           if (data.type === 'event' && typeof data.event?.costUsd === 'number') {
+             fetchSpendMetrics();
+           }
         }
       } catch {}
     });
   }
+
+  await fetchSpendMetrics();
 
   // Watch for daemon errors and show toast
   watch(daemonError, (error) => {
@@ -362,6 +410,23 @@ onMounted(async () => {
           <div class="text-xs text-gray-500 mt-1">Authorization tokens</div>
         </div>
 
+        <!-- AI Spend -->
+        <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-gray-400 text-sm">AI Spend (Daily)</span>
+            <svg class="w-5 h-5 text-pink-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.598 1M12 8V6m0 0V4m0 2c-1.11 0-2.08.402-2.598 1M12 18v2m0-2c-1.11 0-2.08-.402-2.598-1M12 18c1.11 0 2.08-.402 2.598-1" />
+            </svg>
+          </div>
+          <div class="text-3xl font-bold text-pink-300">
+            ${{ spendTotals.dailyUsd.toFixed(2) }}
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            Monthly: ${{ spendTotals.monthlyUsd.toFixed(2) }}
+            <span v-if="spendTotals.llmDailyUsd > 0" class="ml-2 text-[11px] text-gray-500/80">(LLM: ${{ spendTotals.llmDailyUsd.toFixed(2) }} today)</span>
+          </div>
+        </div>
+
         <!-- Agents -->
         <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
           <div class="flex items-center justify-between mb-2">
@@ -399,6 +464,44 @@ onMounted(async () => {
                 <div class="h-full bg-blue-300 rounded-full" :style="{ width: `${(item.count / topIntents[0].count) * 100}%` }"></div>
               </div>
               <span class="text-sm text-gray-400 w-12 text-right">{{ item.count }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Spend by Agent -->
+      <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6 mt-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">AI Spend by Agent</h2>
+          <span v-if="spendLoading" class="text-xs text-gray-500">Updating…</span>
+        </div>
+        <div v-if="!spendAgents.length" class="text-gray-500 text-center py-8">
+          No tracked AI spend yet.
+        </div>
+        <div v-else class="space-y-3">
+          <div v-for="agent in spendAgents" :key="agent.agent" class="flex items-center justify-between border border-gray-500/10 rounded-lg px-4 py-3 bg-gray-500/10">
+            <div class="flex flex-col">
+              <span class="font-mono text-sm text-white">{{ agent.agent }}</span>
+              <span class="text-xs text-gray-500 mt-1">
+                Daily: ${{ agent.dailyUsd.toFixed(2) }} · Monthly: ${{ agent.monthlyUsd.toFixed(2) }}
+              </span>
+              <span v-if="agent.llmDailyUsd && agent.llmDailyUsd > 0" class="text-xs text-gray-500">
+                LLM share: ${{ agent.llmDailyUsd.toFixed(2) }} today · ${{ agent.llmMonthlyUsd?.toFixed(2) || '0.00' }} this month
+              </span>
+              <span v-if="agent.limits" class="text-xs text-gray-500 mt-1">
+                Limits:
+                <span v-if="typeof agent.limits.ai_daily_usd === 'number'">AI Daily ${{ agent.limits.ai_daily_usd.toFixed(2) }}</span>
+                <span v-else>AI Daily —</span>
+                ·
+                <span v-if="typeof agent.limits.ai_monthly_usd === 'number'">AI Monthly ${{ agent.limits.ai_monthly_usd.toFixed(2) }}</span>
+                <span v-else>AI Monthly —</span>
+                <span v-if="typeof agent.limits.llm_daily_usd === 'number'" class="block">
+                  LLM Daily ${{ agent.limits.llm_daily_usd.toFixed(2) }} · LLM Monthly {{ typeof agent.limits.llm_monthly_usd === 'number' ? `$${agent.limits.llm_monthly_usd.toFixed(2)}` : '—' }}
+                </span>
+              </span>
+            </div>
+            <div class="text-xs text-gray-400 text-right">
+              Updated {{ new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }}
             </div>
           </div>
         </div>
