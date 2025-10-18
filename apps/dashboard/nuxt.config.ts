@@ -1,7 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: true },
-  modules: ['@nuxt/ui'],
+  modules: ['@nuxt/ui', '@nuxtjs/supabase'],
   ssr: false,
   css: ['~/assets/css/main.css'],
   postcss: {
@@ -27,6 +27,9 @@ export default defineNuxtConfig({
     public: {
       daemonUrl: process.env.DAEMON_URL || 'http://127.0.0.1:3434'
     }
+  },
+  supabase: {
+    redirect: false
   },
   compatibilityDate: '2024-04-03'
 })

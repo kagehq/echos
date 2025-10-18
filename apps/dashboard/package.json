@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@nuxt/ui": "^2.15.2",
+    "@nuxtjs/supabase": "^2.0.1",
     "chart.js": "^4.5.1",
     "date-fns": "^4.1.0",
     "nuxt": "^3.17.0",
