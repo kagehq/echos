@@ -46,6 +46,12 @@ const webhooks = ref<string[]>([])
 const newWebhookUrl = ref('')
 const loadingWebhooks = ref(false)
 
+// Input Filter Testing
+const inputFilterContent = ref('Hello, my email is john@example.com and my phone is 555-123-4567. Please send this to the team.')
+const inputFilterPolicy = ref<'strict' | 'balanced' | 'permissive'>('balanced')
+const inputFilterResult = ref<any>(null)
+const testingInputFilter = ref(false)
+
 async function testPolicy() {
   testing.value = true
   testResult.value = null
@@ -127,6 +133,34 @@ async function loadWebhooks() {
     showError('Failed to load webhooks')
   } finally {
     loadingWebhooks.value = false
+  }
+}
+
+async function testInputFilter() {
+  testingInputFilter.value = true
+  inputFilterResult.value = null
+  
+  try {
+    const result = await request<any>('/input-filter/test', {
+      method: 'POST',
+      body: { 
+        content: inputFilterContent.value,
+        policy: inputFilterPolicy.value
+      }
+    })
+    
+    if (result) {
+      inputFilterResult.value = result
+      if (result.allowed) {
+        showSuccess('Input filter test completed!')
+      } else {
+        showWarning('Input was blocked or modified by filter')
+      }
+    }
+  } catch (e) {
+    showError('Failed to test input filter')
+  } finally {
+    testingInputFilter.value = false
   }
 }
 
@@ -365,6 +399,90 @@ const getStatusColor = (status: string) => {
                   <div class="text-xs text-gray-500 mb-1">Parsed Template:</div>
                   <pre class="text-xs text-gray-300 bg-black/50 p-2 rounded overflow-x-auto">{{ JSON.stringify(validationResult.parsed, null, 2) }}</pre>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Input Filter Testing -->
+        <div class="border border-gray-500/20 rounded-lg p-6 bg-gray-500/5">
+          <div class="gap-3 mb-4">
+            <h2 class="text-lg font-semibold text-white">Input Filter</h2>
+						<p class="text-gray-400 text-sm mb-4">Test content sanitization and PII detection</p>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-white mb-2">Content to Test</label>
+              <textarea 
+                v-model="inputFilterContent"
+                rows="4"
+                placeholder="Enter content with potential PII, sensitive data, or injection attempts..."
+                class="w-full bg-gray-500/10 border border-gray-500/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              ></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm text-white mb-2">Filter Policy</label>
+              <select 
+                v-model="inputFilterPolicy"
+                class="w-full bg-gray-500/10 border border-gray-500/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              >
+                <option value="permissive">Permissive (injection only)</option>
+                <option value="balanced">Balanced (PII + injection)</option>
+                <option value="strict">Strict (PII + sensitive + injection)</option>
+              </select>
+            </div>
+
+            <button 
+              @click="testInputFilter"
+              :disabled="testingInputFilter"
+              class="w-full px-4 py-2 rounded-lg text-sm bg-purple-300 text-black font-medium hover:bg-purple-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ testingInputFilter ? 'Testing...' : 'Test Input Filter' }}
+            </button>
+
+            <!-- Results -->
+            <div v-if="inputFilterResult" class="mt-4 p-4 rounded-lg bg-black/30 border border-gray-500/20">
+              <div class="flex items-center gap-2 mb-3">
+                <div :class="inputFilterResult.allowed ? 'text-green-400' : 'text-red-400'">
+                  {{ inputFilterResult.allowed ? '✓ Allowed' : '✗ Blocked' }}
+                </div>
+                <span class="text-sm text-gray-400">Policy: {{ inputFilterResult.policy }}</span>
+              </div>
+
+              <div v-if="inputFilterResult.warnings?.length" class="mb-3">
+                <h4 class="text-sm font-medium text-amber-400 mb-2">Warnings:</h4>
+                <ul class="text-xs text-amber-300 space-y-1">
+                  <li v-for="warning in inputFilterResult.warnings" :key="warning">• {{ warning }}</li>
+                </ul>
+              </div>
+
+              <div v-if="inputFilterResult.classifications?.length" class="mb-3">
+                <h4 class="text-sm font-medium text-blue-400 mb-2">Classifications:</h4>
+                <div class="flex flex-wrap gap-1">
+                  <span 
+                    v-for="classification in inputFilterResult.classifications" 
+                    :key="classification"
+                    class="px-2 py-1 rounded text-xs bg-blue-500/20 text-blue-300"
+                  >
+                    {{ classification }}
+                  </span>
+                </div>
+              </div>
+
+              <div v-if="inputFilterResult.redactions?.length" class="mb-3">
+                <h4 class="text-sm font-medium text-orange-400 mb-2">Redactions ({{ inputFilterResult.redactions.length }}):</h4>
+                <div class="text-xs text-orange-300 space-y-1">
+                  <div v-for="redaction in inputFilterResult.redactions" :key="redaction.position">
+                    • {{ redaction.pattern }} at position {{ redaction.position }} ({{ redaction.category }})
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="inputFilterResult.sanitized !== inputFilterContent" class="mt-3">
+                <h4 class="text-sm font-medium text-white mb-2">Sanitized Content:</h4>
+                <pre class="text-xs text-gray-300 bg-black/50 p-2 rounded overflow-x-auto">{{ inputFilterResult.sanitized }}</pre>
               </div>
             </div>
           </div>

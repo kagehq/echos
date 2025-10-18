@@ -13,6 +13,7 @@ import {
   type ResolvedPolicy,
   type PolicyLimits
 } from "./policies.js";
+import { filterInput, INPUT_FILTER_POLICIES, InputFilterResult } from './input-filters.js';
 
 type Decision = "allow"|"block"|"ask";
 type SpendLimitInfo = { timeframe: "daily" | "monthly"; category: "llm" | "total"; value: number; spent: number; remaining: number };
@@ -297,6 +298,42 @@ app.use(eventHandler(async (req) => {
   const { token, ...e } = body;
   
   debug('Decision request:', { agent: e.agent, intent: e.intent, target: e.target, hasToken: !!token });
+  
+  // Apply input filtering for content that might contain sensitive data
+  let inputFilterResult: InputFilterResult | null = null;
+  if (e.target && typeof e.target === 'string' && e.target.length > 0) {
+    // Use strict policy for sensitive intents, balanced for others
+    const filterPolicy = ['llm.chat', 'email.send', 'slack.post'].includes(e.intent) 
+      ? INPUT_FILTER_POLICIES.strict 
+      : INPUT_FILTER_POLICIES.balanced;
+    
+    inputFilterResult = filterInput(e.target, filterPolicy);
+    
+    if (!inputFilterResult.allowed) {
+      debug('Input blocked by filter:', { 
+        agent: e.agent, 
+        intent: e.intent, 
+        warnings: inputFilterResult.warnings,
+        classifications: inputFilterResult.classifications 
+      });
+      return { 
+        status: "block" as Decision, 
+        id: e.id, 
+        policy: { status: "block", source: "input_filter" },
+        message: `Input blocked: ${inputFilterResult.warnings.join(', ')}`
+      };
+    }
+    
+    // If content was sanitized, update the target
+    if (inputFilterResult.sanitized !== e.target) {
+      e.target = inputFilterResult.sanitized;
+      debug('Input sanitized:', { 
+        agent: e.agent, 
+        redactions: inputFilterResult.redactions.length,
+        classifications: inputFilterResult.classifications 
+      });
+    }
+  }
   
   let policyMatch: PolicyMatch;
   
@@ -635,6 +672,38 @@ app.use("/policy/test", eventHandler(async (req) => {
   };
 }));
 
+// --- Input Filter Testing ---
+app.use("/input-filter/test", eventHandler(async (req) => {
+  if (req.method !== 'POST') return;
+  
+  const body = await readBody<{ 
+    content: string;
+    policy?: 'strict' | 'balanced' | 'permissive';
+  }>(req);
+  
+  debug('Input filter test:', { content: body.content.substring(0, 100), policy: body.policy });
+  
+  try {
+    const policy = body.policy ? INPUT_FILTER_POLICIES[body.policy] : INPUT_FILTER_POLICIES.balanced;
+    const result = filterInput(body.content, policy);
+    
+    return {
+      ok: true,
+      allowed: result.allowed,
+      sanitized: result.sanitized,
+      warnings: result.warnings,
+      classifications: result.classifications,
+      redactions: result.redactions,
+      policy: body.policy || 'balanced'
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    };
+  }
+}));
+
 // --- Template Validation ---
 app.use("/templates/validate", eventHandler(async (req) => {
   if (req.method !== 'POST') return;
@@ -804,10 +873,9 @@ app.use("/events", eventHandler(async (req)=>{
   const costUsd = extractCostUsd(e);
   
   // Extract request metadata for audit trail
-  const userAgent = req.headers['user-agent'] as string;
-  const ipAddress = req.headers['x-forwarded-for'] as string || 
-                   req.headers['x-real-ip'] as string || 
-                   req.connection?.remoteAddress || 
+  const userAgent = req.headers.get('user-agent') || 'unknown';
+  const ipAddress = req.headers.get('x-forwarded-for') || 
+                   req.headers.get('x-real-ip') || 
                    'unknown';
   
   // Get agent's spend limits from role assignment

@@ -40,6 +40,15 @@ Showcases advanced developer tools for testing and debugging policies.
 tsx examples/developer-tools.ts
 ```
 
+### 🛡️ Input Filtering (`input-filtering.ts`)
+Demonstrates content sanitization and PII detection to prevent sensitive data from entering agent conversations.
+
+**Features**: PII detection, content classification, injection prevention, DSR compliance
+
+```bash
+tsx examples/input-filtering.ts
+```
+
 ### 👥 User Management (`user-management.ts`)
 Programmatic user creation with capped spend limits - perfect for SaaS applications.
 
