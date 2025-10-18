@@ -253,6 +253,46 @@ export class EchosClient {
       return { ok: false, error: "Failed to remove webhook" };
     }
   }
+
+  // Test input filtering
+  async testInputFilter(content: string, policy?: 'strict' | 'balanced' | 'permissive'){
+    try {
+      const data = await postJSON<{
+        ok: boolean;
+        allowed: boolean;
+        sanitized: string;
+        warnings: string[];
+        classifications: string[];
+        redactions: Array<{
+          pattern: string;
+          position: number;
+          length: number;
+          category: string;
+        }>;
+        policy: string;
+        error?: string;
+      }>("/input-filter/test", { content, policy });
+      return data ?? { 
+        ok: false, 
+        allowed: false, 
+        sanitized: content, 
+        warnings: ["Request failed"], 
+        classifications: [], 
+        redactions: [],
+        policy: 'balanced'
+      };
+    } catch {
+      return { 
+        ok: false, 
+        allowed: false, 
+        sanitized: content, 
+        warnings: ["Failed to test input filter"], 
+        classifications: [], 
+        redactions: [],
+        policy: 'balanced'
+      };
+    }
+  }
 }
 
 export function echos(name?:string){ return new EchosClient(name); }
