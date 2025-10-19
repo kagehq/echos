@@ -6,6 +6,7 @@
   "scripts": {
     "build": "turbo build",
     "build:sdk": "pnpm -C packages/sdk build",
+    "start": "pnpm -C apps/daemon dev",
     "dev": "turbo run dev --parallel",
     "dev:daemon": "pnpm -C apps/daemon dev",
     "dev:dashboard": "pnpm -C apps/dashboard dev",
