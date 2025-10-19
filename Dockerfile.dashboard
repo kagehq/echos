@@ -1,0 +1,25 @@
+FROM node:18-alpine
+
+# Install pnpm
+RUN npm install -g pnpm
+
+WORKDIR /app
+
+# Copy workspace files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy all packages and apps needed
+COPY packages/ ./packages/
+COPY apps/dashboard/ ./apps/dashboard/
+
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build dashboard
+WORKDIR /app/apps/dashboard
+RUN pnpm build
+
+EXPOSE 3000
+
+CMD ["pnpm", "start"]
+
