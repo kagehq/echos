@@ -4,9 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "preinstall": "npm install -g pnpm@10.12.4 || true",
     "dev": "nuxt dev",
-    "build": "npm install -g pnpm@10.12.4 && pnpm build:nuxt",
-    "build:nuxt": "nuxt build",
+    "build": "nuxt build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "start": "node .output/server/index.mjs"
