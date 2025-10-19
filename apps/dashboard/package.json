@@ -9,7 +9,7 @@
     "build": "nuxt build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "start": "npm install -g pnpm@10.12.4 > /dev/null 2>&1 || true && node .output/server/index.mjs"
+    "start": "node .output/server/index.mjs"
   },
   "dependencies": {
     "@nuxt/ui": "^2.15.2",

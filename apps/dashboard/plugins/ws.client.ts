@@ -2,13 +2,18 @@ export default defineNuxtPlugin(() => {
   let ws: WebSocket | null = null;
   let reconnectTimeout: number | null = null;
   const listeners = new Set<(event: MessageEvent) => void>();
+  
+  // Get daemon URL from runtime config and convert to WebSocket URL
+  const config = useRuntimeConfig()
+  const daemonUrl = config.public.daemonUrl || 'http://127.0.0.1:3434'
+  const wsUrl = daemonUrl.replace(/^http/, 'ws') + '/ws'
 
   function connect() {
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
       return;
     }
 
-    ws = new WebSocket("ws://127.0.0.1:3434/ws");
+    ws = new WebSocket(wsUrl);
 
     ws.addEventListener("message", (event) => {
       listeners.forEach(listener => listener(event));

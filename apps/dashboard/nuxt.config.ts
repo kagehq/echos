@@ -25,7 +25,7 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      daemonUrl: process.env.DAEMON_URL || 'http://127.0.0.1:3434'
+      daemonUrl: process.env.NUXT_PUBLIC_DAEMON_URL || process.env.DAEMON_URL || 'http://127.0.0.1:3434'
     }
   },
   supabase: {

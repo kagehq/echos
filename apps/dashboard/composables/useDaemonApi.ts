@@ -1,7 +1,17 @@
 import { ref } from 'vue'
 
-const DAEMON_BASE_URL = 'http://127.0.0.1:3434'
 const DEFAULT_TIMEOUT = 5000 // 5 seconds
+
+// Helper to get daemon base URL from runtime config
+function getDaemonBaseUrl(): string {
+  try {
+    const config = useRuntimeConfig()
+    return config.public.daemonUrl || 'http://127.0.0.1:3434'
+  } catch {
+    // Fallback if runtime config is not available
+    return 'http://127.0.0.1:3434'
+  }
+}
 
 export interface DaemonApiOptions {
   timeout?: number
@@ -42,6 +52,9 @@ export async function daemonRequest<T = any>(
   options: DaemonApiOptions = {}
 ): Promise<T> {
   const { timeout = DEFAULT_TIMEOUT, method = 'GET', body } = options
+  
+  // Get the daemon base URL dynamically
+  const DAEMON_BASE_URL = getDaemonBaseUrl()
   
   // Create abort controller for timeout
   const controller = new AbortController()
