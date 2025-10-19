@@ -1,12 +1,11 @@
 // Middleware for protected routes that require authentication
 export default defineNuxtRouteMiddleware(async (to, from) => {
-  const user = useSupabaseUser()
   const supabase = useSupabaseClient()
 
   // Wait for Supabase to initialize and load the session
   const { data: { session } } = await supabase.auth.getSession()
   
-  if (!session || !user.value) {
+  if (!session?.user) {
     return navigateTo('/login')
   }
 
@@ -15,7 +14,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('id')
-      .eq('id', user.value.id)
+      .eq('id', session.user.id)
       .single()
 
     // If profile doesn't exist or there's an error, sign out and redirect
