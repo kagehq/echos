@@ -3,13 +3,13 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { useDaemonApi } from '~/composables/useDaemonApi';
-import { useToast } from '~/composables/useToast';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 definePageMeta({
-  ssr: false
+  ssr: false,
+  middleware: 'auth'
 });
 
 useHead({
@@ -21,7 +21,7 @@ useHead({
 
 // Watchdog timer for daemon API calls
 const { request, daemonError } = useDaemonApi();
-const { error: showError } = useToast();
+const toast = useToast() as any;
 
 const { $ws } = useNuxtApp() as any;
 const refreshing = ref(false);
@@ -75,6 +75,14 @@ const metrics = computed(() => {
     ...filtered.filter(e => e.type === 'roleApplied' && e.agent).map(e => e.agent)
   ].filter(Boolean)).size;
 
+  // Calculate average processing time from event durations
+  const durationsMs = filtered
+    .map(e => e.duration)
+    .filter(d => typeof d === 'number' && d > 0);
+  const avgTime = durationsMs.length > 0
+    ? Math.round(durationsMs.reduce((sum, d) => sum + d, 0) / durationsMs.length)
+    : 0;
+
   return {
     total: filtered.length,
     allowed,
@@ -82,7 +90,7 @@ const metrics = computed(() => {
     blocked,
     rolesApplied,
     tokensIssued,
-    avgTime: 0, // TODO: Calculate from metadata if available
+    avgTime, // Average processing time in milliseconds
     agents: uniqueAgents
   };
 });
@@ -290,7 +298,7 @@ onMounted(async () => {
   // Watch for daemon errors and show toast
   watch(daemonError, (error) => {
     if (error) {
-      showError("Connection error. The daemon may be down.")
+      toast.error("Connection error. The daemon may be down.")
     }
   });
 });
@@ -414,8 +422,8 @@ onMounted(async () => {
         <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
           <div class="flex items-center justify-between mb-2">
             <span class="text-gray-400 text-sm">AI Spend (Daily)</span>
-            <svg class="w-5 h-5 text-pink-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.598 1M12 8V6m0 0V4m0 2c-1.11 0-2.08.402-2.598 1M12 18v2m0-2c-1.11 0-2.08-.402-2.598-1M12 18c1.11 0 2.08-.402 2.598-1" />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 text-pink-300">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
           </div>
           <div class="text-3xl font-bold text-pink-300">
@@ -436,6 +444,18 @@ onMounted(async () => {
             </svg>
           </div>
           <div class="text-3xl font-bold text-purple-300">{{ metrics.agents }}</div>
+        </div>
+
+        <!-- Average Response Time -->
+        <div class="bg-gray-500/5 border border-gray-500/20 rounded-lg p-6">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-gray-400 text-sm">Avg Response Time</span>
+            <svg class="w-5 h-5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="text-3xl font-bold text-indigo-300">{{ metrics.avgTime }}ms</div>
+          <div class="text-xs text-gray-500 mt-1">Processing time</div>
         </div>
       </div>
 

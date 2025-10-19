@@ -22,12 +22,18 @@ pnpm add @echoshq/sdk
 ```typescript
 import { echos } from "@echoshq/sdk";
 
-// Create an agent instance
-const agent = echos("my_agent");
+// Create an agent instance with API key
+const agent = echos("my_agent", {
+  headers: {
+    'Authorization': `Bearer ${process.env.ECHOS_API_KEY}`
+  }
+});
 
 // Emit actions (checked against policy)
 await agent.emit("slack.post", "#general", { text: "Deploy complete!" });
 ```
+
+**Get your API key:** Sign up at `http://localhost:3000/signup`, then go to Settings to create a key.
 
 ## Features
 
@@ -39,14 +45,16 @@ await agent.emit("slack.post", "#general", { text: "Deploy complete!" });
 
 ## API
 
-### `echos(agentName: string, daemonUrl?: string)`
+### `echos(agentName: string, options?: { headers?: Record<string, string> })`
 
-Create an agent instance.
+Create an agent instance with API key authentication.
 
 ```typescript
-const agent = echos("my_agent");
-// or specify custom daemon URL
-const agent = echos("my_agent", "http://localhost:3434");
+const agent = echos("my_agent", {
+  headers: {
+    'Authorization': `Bearer ${process.env.ECHOS_API_KEY}`
+  }
+});
 ```
 
 ### `agent.emit(intent, target?, meta?, request?, response?, metadata?)`

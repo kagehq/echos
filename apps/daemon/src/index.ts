@@ -14,6 +14,33 @@ import {
   type PolicyLimits
 } from "./policies.js";
 import { filterInput, INPUT_FILTER_POLICIES, InputFilterResult } from './input-filters.js';
+import { supabase } from './supabase.js';
+import { authenticateRequest, requireAuth, type AuthContext } from './auth.js';
+import { 
+  storeEvent, 
+  getEvents, 
+  getOrCreateAgent, 
+  updateAgentPolicy, 
+  getAgent, 
+  listAgents,
+  // Templates
+  getTemplate,
+  listTemplates as listDbTemplates,
+  createTemplate,
+  // Tokens
+  storeToken,
+  getToken as getDbToken,
+  updateTokenStatus,
+  listTokens as listDbTokens,
+  // Webhooks
+  getWebhooks as getDbWebhooks,
+  addWebhook as addDbWebhook,
+  removeWebhook as removeDbWebhook,
+  // Spend tracking
+  addSpend as addDbSpend,
+  getSpendSummary,
+  getAllSpend
+} from './db.js';
 
 type Decision = "allow"|"block"|"ask";
 type SpendLimitInfo = { timeframe: "daily" | "monthly"; category: "llm" | "total"; value: number; spent: number; remaining: number };
@@ -75,6 +102,13 @@ const TOKENS = new Map<string, TokenRecord>();
 const TIMELINE: TimelineEntry[] = [];
 const WEBHOOKS: string[] = []; // URLs to notify on events
 const DEBUG_MODE = process.env.ECHOS_DEBUG === "1";
+const DB_MODE = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY);
+
+if (DB_MODE) {
+  console.log('[Database] ✓ Database mode enabled - using Supabase for agents and events');
+} else {
+  console.log('[Database] ℹ Legacy mode - using YAML files and memory storage');
+}
 
 const SECRET_KEY = createSecretKey(process.env.ECHOS_SECRET ? Buffer.from(process.env.ECHOS_SECRET,"utf8") : randomBytes(32));
 const now = ()=>Date.now();
@@ -254,8 +288,8 @@ const CORS_ORIGIN = process.env.ECHOS_CORS_ORIGIN || "*";
 // CORS middleware
 app.use(eventHandler((req) => {
   setResponseHeader(req, "Access-Control-Allow-Origin", CORS_ORIGIN);
-  setResponseHeader(req, "Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  setResponseHeader(req, "Access-Control-Allow-Headers", "content-type");
+  setResponseHeader(req, "Access-Control-Allow-Methods", "GET,POST,OPTIONS,DELETE");
+  setResponseHeader(req, "Access-Control-Allow-Headers", "content-type,authorization,x-api-key");
   if (req.method === "OPTIONS") {
     return { ok: true } as any;
   }
@@ -293,6 +327,8 @@ function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, 
 // --- Decide: allow|block|ask ---
 app.use(eventHandler(async (req) => {
   if (req.path !== '/decide' || req.method !== 'POST') return;
+  
+  const decisionStartTime = Date.now(); // Track decision processing time
   
   const body = await readBody<EventMsg & { token?: string }>(req);
   const { token, ...e } = body;
@@ -339,7 +375,25 @@ app.use(eventHandler(async (req) => {
   
   // Check if a valid token exists that covers this intent
   if (token) {
-    const tokenRec = TOKENS.get(token);
+    let tokenRec = TOKENS.get(token); // Check memory first (backward compat)
+    
+    // If not in memory and DB_MODE, check database
+    if (!tokenRec && DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (auth) {
+        const dbToken = await getDbToken(token, auth.organizationId);
+        if (dbToken) {
+          tokenRec = {
+            token: dbToken.token,
+            agent: dbToken.agent_id,
+            scopes: dbToken.scopes,
+            expiresAt: new Date(dbToken.expires_at).getTime(),
+            status: dbToken.status as "active" | "paused" | "revoked"
+          };
+        }
+      }
+    }
+    
     if (tokenRec && tokenRec.status === "active" && now() < tokenRec.expiresAt) {
       // Check if token scopes cover this intent
       if (tokenRec.scopes.includes(e.intent)) {
@@ -461,16 +515,20 @@ app.use(eventHandler(async (req) => {
   
   // Build error context for better messages
   const errorContext = buildErrorContext(e, status, matchedRule || undefined, source, policyMatch);
-  debug('Policy decision:', { status, rule: matchedRule, source, limit: limitInfo, context: errorContext });
+  
+  // Calculate processing duration
+  const duration = Date.now() - decisionStartTime;
+  
+  debug('Policy decision:', { status, rule: matchedRule, source, limit: limitInfo, context: errorContext, duration });
   
   if (status === "ask") {
-    const msg = { type:"ask", event:{ ...e, policy: policyMatch }, ts: now() };
+    const msg = { type:"ask", event:{ ...e, policy: policyMatch, duration }, ts: now() };
     TIMELINE.unshift(msg);
     await broadcast(msg);
     await notifyWebhooks(msg);
   }
   
-  return { status, id: e.id, policy: policyMatch, message: errorContext };
+  return { status, id: e.id, policy: policyMatch, message: errorContext, duration };
 }));
 
 // Long-poll wait for human decision (from dashboard)
@@ -543,6 +601,20 @@ app.use("/tokens/issue", eventHandler(async (req)=>{
     subscriptionId: b.subscriptionId
   };
   
+  // Store in database if in DB mode
+  if (DB_MODE) {
+    const auth = await authenticateRequest(req);
+    if (auth) {
+      await storeToken(jwt, auth.organizationId, b.agent, b.scopes, new Date(expAt), {
+        createdBy: b.createdBy,
+        createdReason: b.createdReason || b.reason,
+        customerId: b.customerId,
+        subscriptionId: b.subscriptionId
+      });
+    }
+  }
+  
+  // Also store in memory for backward compatibility
   TOKENS.set(jwt, rec);
   const msg = { 
     type:"token", 
@@ -782,12 +854,40 @@ app.use("/templates/validate", eventHandler(async (req) => {
 // --- Webhook Management ---
 app.use("/webhooks", eventHandler(async (req) => {
   if (req.method === 'GET') {
+    // If in DB mode, fetch from database
+    if (DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (!auth) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      const webhooks = await getDbWebhooks(auth.organizationId);
+      return { webhooks };
+    }
     return { webhooks: WEBHOOKS };
   } else if (req.method === 'POST') {
     const { url } = await readBody<{ url: string }>(req);
     if (!url || !url.startsWith('http')) {
       return { ok: false, error: 'Invalid webhook URL' };
     }
+    
+    // If in DB mode, store in database
+    if (DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (!auth) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      await addDbWebhook(url, auth.organizationId);
+      const webhooks = await getDbWebhooks(auth.organizationId);
+      return { ok: true, webhooks };
+    }
+    
+    // Legacy mode - store in memory
     if (!WEBHOOKS.includes(url)) {
       WEBHOOKS.push(url);
       debug('Webhook added:', url);
@@ -795,6 +895,22 @@ app.use("/webhooks", eventHandler(async (req) => {
     return { ok: true, webhooks: WEBHOOKS };
   } else if (req.method === 'DELETE') {
     const { url } = await readBody<{ url: string }>(req);
+    
+    // If in DB mode, remove from database
+    if (DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (!auth) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      await removeDbWebhook(url, auth.organizationId);
+      const webhooks = await getDbWebhooks(auth.organizationId);
+      return { ok: true, webhooks };
+    }
+    
+    // Legacy mode - remove from memory
     const idx = WEBHOOKS.indexOf(url);
     if (idx !== -1) {
       WEBHOOKS.splice(idx, 1);
@@ -818,6 +934,14 @@ app.use("/roles/apply", eventHandler(async (req)=>{
   
   try {
     const resolved = applyRole(body.agentId, body.template, body.overrides as any);
+    
+    // Store in database if in DB mode
+    if (DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (auth) {
+        await updateAgentPolicy(body.agentId, auth.organizationId, resolved, resolved.limits);
+      }
+    }
     
     // Audit log: record role change
     const msg = { 
@@ -868,7 +992,25 @@ app.use("/roles", eventHandler(async (req)=>{
 
 // Events & timeline
 app.use("/events", eventHandler(async (req)=>{ 
-  if (req.method !== 'POST') return;
+  if (req.method !== 'POST') {
+    // GET request - fetch events from DB or memory
+    if (DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (!auth) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      const events = await getEvents(auth.organizationId);
+      return { events };
+    } else {
+      // Legacy mode - return from memory
+      return { events: TIMELINE.slice(0, 1000) };
+    }
+  }
+  
+  // POST request - record event
   const e = await readBody<EventMsg>(req);
   const costUsd = extractCostUsd(e);
   
@@ -887,6 +1029,8 @@ app.use("/events", eventHandler(async (req)=>{
     costUsd: costUsd !== null ? costUsd : e.costUsd,
     userAgent,
     ipAddress,
+    // Duration comes from client or defaults to the provided value
+    duration: e.duration,
     // Add correlation ID if not present
     correlationId: e.correlationId || `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     // Include agent's spend limits
@@ -894,13 +1038,31 @@ app.use("/events", eventHandler(async (req)=>{
   };
 
   if (costUsd !== null) {
-    if (e.intent === "llm.chat") {
-      addSpend(e.agent, costUsd, e.ts ?? now(), "llm");
-    } else {
-      addSpend(e.agent, costUsd, e.ts ?? now(), "general");
+    const spendType = e.intent === "llm.chat" ? "llm" : "general";
+    
+    // Store in database if in DB mode
+    if (DB_MODE) {
+      const auth = await authenticateRequest(req);
+      if (auth) {
+        await addDbSpend(auth.organizationId, e.agent, costUsd, spendType, new Date(e.ts ?? now()));
+      }
+    }
+    
+    // Also store in memory for backward compatibility
+    addSpend(e.agent, costUsd, e.ts ?? now(), spendType);
+  }
+
+  // Store in database if in DB mode
+  if (DB_MODE) {
+    const auth = await authenticateRequest(req);
+    if (auth) {
+      // Ensure agent exists in database before storing event
+      await getOrCreateAgent(e.agent, auth.organizationId);
+      await storeEvent(eventRecord, auth.organizationId);
     }
   }
 
+  // Always store in memory for backward compatibility and websocket broadcasts
   const msg = { type:"event", event: eventRecord, ts: eventRecord.ts };
   TIMELINE.unshift(msg); 
   await broadcast(msg);
@@ -959,9 +1121,50 @@ app.use("/metrics/llm", eventHandler(async (req) => {
 app.use("/timeline", eventHandler(async (req)=>{
   // Avoid matching .ndjson (already handled above)
   if (req.path?.includes('.ndjson')) return;
+  
+  // If in database mode, fetch from database
+  if (DB_MODE) {
+    const auth = await authenticateRequest(req);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    const events = await getEvents(auth.organizationId, 1000);
+    return { events };
+  }
+  
+  // Legacy mode - return from memory
   return { events: TIMELINE.slice(0,1000) };
 }));
-app.use("/timeline/replay", eventHandler(async (req)=>{ const { fromTs, toTs } = await readBody<{fromTs?:number; toTs?:number}>(req); const s=fromTs??0, t=toTs??now(); const slice = TIMELINE.filter(e=>e.ts>=s && e.ts<=t).sort((a,b)=>a.ts-b.ts); return { events:slice }; }));
+
+app.use("/timeline/replay", eventHandler(async (req)=>{ 
+  const { fromTs, toTs } = await readBody<{fromTs?:number; toTs?:number}>(req); 
+  const s=fromTs??0, t=toTs??now(); 
+  
+  // If in database mode, fetch filtered events from database
+  if (DB_MODE) {
+    const auth = await authenticateRequest(req);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    // Fetch all events and filter by timestamp (Supabase doesn't have a timestamp column yet, would need migration)
+    const allEvents = await getEvents(auth.organizationId, 10000);
+    const filtered = allEvents.filter((e: any) => {
+      const ts = e.ts || e.event?.ts || 0;
+      return ts >= s && ts <= t;
+    }).sort((a: any, b: any) => (a.ts || 0) - (b.ts || 0));
+    return { events: filtered };
+  }
+  
+  // Legacy mode - filter from memory
+  const slice = TIMELINE.filter(e=>e.ts>=s && e.ts<=t).sort((a,b)=>a.ts-b.ts); 
+  return { events:slice }; 
+}));
 
 // ENV config (continued)
 const PORT = parseInt(process.env.ECHOS_PORT || "3434");

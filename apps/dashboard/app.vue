@@ -1,7 +1,7 @@
 <template>
   <div class="bg-black">
     <NuxtPage />
-    <ToastContainer />
+    <UNotifications />
   </div>
 </template>
 

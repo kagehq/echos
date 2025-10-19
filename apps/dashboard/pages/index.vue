@@ -2,10 +2,10 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useDaemonApi } from '~/composables/useDaemonApi'
 import { useCopy } from '~/composables/useCopy'
-import { useToast } from '~/composables/useToast'
 
 definePageMeta({
-  ssr: false
+  ssr: false,
+  middleware: 'auth'
 })
 
 useHead({
@@ -720,6 +720,18 @@ async function resume(t:any){
                     <span class="text-white font-mono break-all">{{ m.event.target }}</span>
                   </div>
                   
+                  <!-- Preview -->
+                  <div v-if="m.event?.preview" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Preview:</span>
+                    <span class="text-gray-400 italic">{{ m.event.preview }}</span>
+                  </div>
+                  
+                  <!-- Token Attached -->
+                  <div v-if="m.event?.tokenAttached" class="flex gap-2">
+                    <span class="text-gray-500 w-20 shrink-0">Token:</span>
+                    <span class="text-blue-300">✓ Token attached</span>
+                  </div>
+                  
                   <!-- Request -->
                   <div v-if="m.event?.request" class="flex gap-2 flex-col">
                     <div class="flex items-center justify-between">
@@ -754,10 +766,106 @@ async function resume(t:any){
                     <pre class="text-green-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.response, null, 2) }}</pre>
                   </div>
                   
-                  <!-- Metadata -->
-                  <div v-if="m.event?.metadata" class="flex gap-2 flex-col">
+                  <!-- Enhanced Metadata Fields -->
+                  <div v-if="m.event?.costUsd || m.event?.customerId || m.event?.feature || m.event?.environment" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Business Context:</span>
+                    <div class="ml-4 space-y-1">
+                      <div v-if="m.event.costUsd" class="flex gap-2">
+                        <span class="text-gray-500">Cost:</span>
+                        <span class="text-green-300 font-mono">${{ m.event.costUsd.toFixed(4) }}</span>
+                      </div>
+                      <div v-if="m.event.customerId" class="flex gap-2">
+                        <span class="text-gray-500">Customer:</span>
+                        <span class="text-white font-mono">{{ m.event.customerId }}</span>
+                      </div>
+                      <div v-if="m.event.subscriptionId" class="flex gap-2">
+                        <span class="text-gray-500">Subscription:</span>
+                        <span class="text-white font-mono">{{ m.event.subscriptionId }}</span>
+                      </div>
+                      <div v-if="m.event.feature" class="flex gap-2">
+                        <span class="text-gray-500">Feature:</span>
+                        <span class="text-white font-mono">{{ m.event.feature }}</span>
+                      </div>
+                      <div v-if="m.event.environment" class="flex gap-2">
+                        <span class="text-gray-500">Environment:</span>
+                        <span class="text-blue-300 font-mono">{{ m.event.environment }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Performance Metrics -->
+                  <div v-if="m.event?.duration || m.event?.tokensUsed || m.event?.latency" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Performance:</span>
+                    <div class="ml-4 space-y-1">
+                      <div v-if="m.event.duration" class="flex gap-2">
+                        <span class="text-gray-500">Duration:</span>
+                        <span class="text-purple-300 font-mono">{{ m.event.duration }}ms</span>
+                      </div>
+                      <div v-if="m.event.tokensUsed" class="flex gap-2">
+                        <span class="text-gray-500">Tokens:</span>
+                        <span class="text-purple-300 font-mono">{{ m.event.tokensUsed.toLocaleString() }}</span>
+                      </div>
+                      <div v-if="m.event.latency" class="flex gap-2">
+                        <span class="text-gray-500">Latency:</span>
+                        <span class="text-purple-300 font-mono">{{ m.event.latency }}ms</span>
+                      </div>
+                      <div v-if="m.event.modelVersion" class="flex gap-2">
+                        <span class="text-gray-500">Model:</span>
+                        <span class="text-white font-mono">{{ m.event.modelVersion }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Audit Trail -->
+                  <div v-if="m.event?.userAgent || m.event?.ipAddress || m.event?.sessionId || m.event?.correlationId" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
+                    <span class="text-gray-500 font-semibold">Audit Trail:</span>
+                    <div class="ml-4 space-y-1">
+                      <div v-if="m.event.correlationId" class="flex gap-2">
+                        <span class="text-gray-500">Correlation ID:</span>
+                        <span class="text-gray-400 font-mono text-xs">{{ m.event.correlationId }}</span>
+                      </div>
+                      <div v-if="m.event.sessionId" class="flex gap-2">
+                        <span class="text-gray-500">Session ID:</span>
+                        <span class="text-gray-400 font-mono text-xs">{{ m.event.sessionId }}</span>
+                      </div>
+                      <div v-if="m.event.ipAddress && m.event.ipAddress !== 'unknown'" class="flex gap-2">
+                        <span class="text-gray-500">IP Address:</span>
+                        <span class="text-gray-400 font-mono">{{ m.event.ipAddress }}</span>
+                      </div>
+                      <div v-if="m.event.userAgent && m.event.userAgent !== 'unknown'" class="flex gap-2">
+                        <span class="text-gray-500">User Agent:</span>
+                        <span class="text-gray-400 font-mono text-xs">{{ m.event.userAgent }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Error Context -->
+                  <div v-if="m.event?.errorCode || m.event?.errorStack || m.event?.retryCount || m.event?.errorContext" class="flex gap-2 flex-col mt-2 pt-2 border-t border-red-500/20">
+                    <span class="text-red-400 font-semibold">⚠️ Error Details:</span>
+                    <div class="ml-4 space-y-1">
+                      <div v-if="m.event.errorCode" class="flex gap-2">
+                        <span class="text-gray-500">Error Code:</span>
+                        <span class="text-red-400 font-mono">{{ m.event.errorCode }}</span>
+                      </div>
+                      <div v-if="m.event.retryCount !== undefined" class="flex gap-2">
+                        <span class="text-gray-500">Retry Count:</span>
+                        <span class="text-yellow-300 font-mono">{{ m.event.retryCount }}</span>
+                      </div>
+                      <div v-if="m.event.errorStack" class="flex gap-2 flex-col">
+                        <span class="text-gray-500">Stack Trace:</span>
+                        <pre class="text-red-300 font-mono text-xs w-full bg-red-500/5 border border-red-500/20 p-2 rounded-lg overflow-x-auto">{{ m.event.errorStack }}</pre>
+                      </div>
+                      <div v-if="m.event.errorContext" class="flex gap-2 flex-col">
+                        <span class="text-gray-500">Error Context:</span>
+                        <pre class="text-red-300 font-mono text-xs w-full bg-red-500/5 border border-red-500/20 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.errorContext, null, 2) }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Metadata (fallback for any other fields) -->
+                  <div v-if="m.event?.metadata" class="flex gap-2 flex-col mt-2 pt-2 border-t border-gray-500/10">
                     <div class="flex items-center justify-between">
-                      <span class="text-gray-500 w-20 shrink-0">Metadata:</span>
+                      <span class="text-gray-500 w-20 shrink-0">Raw Metadata:</span>
                       <button 
                         @click="copyJSON(m.event.metadata, 'Metadata')"
                         class="p-1 rounded hover:bg-gray-500/10 text-gray-400 hover:text-white transition-colors"
@@ -768,7 +876,7 @@ async function resume(t:any){
                         </svg>
                       </button>
                     </div>
-                    <pre class="text-purple-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto">{{ JSON.stringify(m.event.metadata, null, 2) }}</pre>
+                    <pre class="text-purple-300 font-mono w-full bg-gray-500/5 border border-gray-500/10 p-2 rounded-lg overflow-x-auto text-xs">{{ JSON.stringify(m.event.metadata, null, 2) }}</pre>
                   </div>
                   
                   <!-- Policy Decision -->

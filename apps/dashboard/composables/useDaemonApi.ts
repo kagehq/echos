@@ -24,8 +24,18 @@ export class DaemonConnectionError extends Error {
   }
 }
 
+// Store API key in memory (will be set by useDaemonApi)
+let cachedApiKey: string | null = null
+
 /**
- * Make a request to the daemon with timeout protection
+ * Set the API key for daemon requests
+ */
+export function setDaemonApiKey(apiKey: string | null) {
+  cachedApiKey = apiKey
+}
+
+/**
+ * Make a request to the daemon with timeout protection and API key authentication
  */
 export async function daemonRequest<T = any>(
   endpoint: string, 
@@ -38,13 +48,20 @@ export async function daemonRequest<T = any>(
   const timeoutId = setTimeout(() => controller.abort(), timeout)
   
   try {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    }
+
+    // Add API key if available
+    if (cachedApiKey) {
+      headers['Authorization'] = `Bearer ${cachedApiKey}`
+    }
+
     const response = await fetch(`${DAEMON_BASE_URL}${endpoint}`, {
       method,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     })
     
     if (!response.ok) {
@@ -79,11 +96,40 @@ export async function daemonRequest<T = any>(
 }
 
 /**
- * Composable for managing daemon API state
+ * Composable for managing daemon API state with API key authentication
  */
 export function useDaemonApi() {
   const daemonError = ref(false)
   const isConnected = ref(false)
+  const apiKeyInitialized = ref(false)
+  
+  /**
+   * Initialize API key from Supabase
+   */
+  async function initApiKey() {
+    if (apiKeyInitialized.value) {
+      return true
+    }
+    
+    try{
+      // Dynamically import to avoid circular dependencies
+      const { useApiKeys } = await import('./useApiKeys')
+      const { getOrCreateDefaultApiKey } = useApiKeys()
+      
+      const apiKey = await getOrCreateDefaultApiKey()
+      
+      if (apiKey) {
+        setDaemonApiKey(apiKey)
+        apiKeyInitialized.value = true
+        return true
+      }
+      console.warn('[useDaemonApi] ❌ Failed to get API key')
+      return false
+    } catch (error) {
+      console.error('[useDaemonApi] ❌ Failed to initialize API key:', error)
+      return false
+    }
+  }
   
   /**
    * Make a daemon request and automatically update connection state
@@ -92,6 +138,9 @@ export function useDaemonApi() {
     endpoint: string,
     options: DaemonApiOptions = {}
   ): Promise<T | null> {
+    // Initialize API key if needed
+    await initApiKey()
+    
     try {
       const result = await daemonRequest<T>(endpoint, options)
       daemonError.value = false
@@ -114,6 +163,8 @@ export function useDaemonApi() {
    * Check daemon health
    */
   async function checkHealth(): Promise<boolean> {
+    await initApiKey()
+    
     try {
       await daemonRequest('/tokens/list', { timeout: 3000 })
       daemonError.value = false
@@ -129,6 +180,8 @@ export function useDaemonApi() {
   return {
     daemonError,
     isConnected,
+    apiKeyInitialized,
+    initApiKey,
     request,
     checkHealth,
     daemonRequest, // Export for direct use

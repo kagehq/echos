@@ -24,25 +24,25 @@ Echos intercepts actions *before* they happen, giving you policy-based control a
 
 ## Quick Start
 
+**Local Development:**
+
 ```bash
 git clone https://github.com/kagehq/echos.git
 cd echos
-pnpm run setup:node
-source scripts/env.sh
 pnpm install
-pnpm build:all
-pnpm demo
+
+# Interactive setup (configures Supabase)
+pnpm run setup
+
+# Start dashboard + daemon
+pnpm run dev:stack
 ```
 
-The demo will automatically start both the daemon and dashboard. Visit `http://localhost:3000` to see the dashboard.
+Visit `http://localhost:3000` → Sign up → Create API key in Settings
 
-### Development
+**Self-Hosting / Production:** See [SELFHOSTING.md](SELFHOSTING.md) for deployment guides.
 
-```bash
-pnpm dev:stack
-```
-
-## Use in Your Project
+## Usage
 
 ```bash
 npm install @echoshq/sdk
@@ -51,65 +51,91 @@ npm install @echoshq/sdk
 ```ts
 import { echos } from '@echoshq/sdk';
 
-const agent = echos('my_agent');
+const agent = echos('my_agent', {
+  headers: { 'Authorization': `Bearer ${process.env.ECHOS_API_KEY}` }
+});
+
 await agent.emit('slack.post', '#general', { text: 'Hello!' });
+```
+
+### Automatic Input Filtering
+
+PII and sensitive data are automatically redacted:
+
+```ts
+// Your code
+await agent.emit('slack.post', '#general', { 
+  text: 'Contact john@company.com at 555-123-4567' 
+});
+
+// What actually gets posted (PII automatically redacted)
+// "Contact [EMAIL_REDACTED] at [PHONE_REDACTED]"
 ```
 
 ### With Spend Limits
 
 ```ts
-const guard = echos('pipeline-123');
-await guard.applyRole({
+await agent.applyRole({
   template: 'research_assistant',
-  overrides: { limits: { ai_daily_usd: 10, llm_daily_usd: 5 } }
+  overrides: { limits: { ai_daily_usd: 10 } }
 });
 
-await guard.emit('llm.chat', 'gpt-4o', { prompt }, undefined, undefined, { costUsd: 0.01 });
-```
-
-### Input Filtering
-
-```ts
-// Test content filtering
-const result = await agent.testInputFilter('Contact john@example.com at 555-123-4567', 'strict');
-console.log(result.sanitized); // "Contact [EMAIL_REDACTED] at [PHONE_REDACTED]"
-
-// Automatic protection
-await agent.emit('llm.chat', 'Analyze: john@example.com, 555-123-4567');
-// Agent receives: "Analyze: [EMAIL_REDACTED], [PHONE_REDACTED]"
+await agent.emit('llm.chat', 'gpt-4o', { prompt }, undefined, undefined, { costUsd: 0.01 });
 ```
 
 ### Python
 
 ```py
 import requests
-from uuid import uuid4
 
-def emit(intent, target=None, metadata=None):
-    event = {"agent": "python-agent", "intent": intent, "target": target, "metadata": metadata}
-    resp = requests.post("http://127.0.0.1:3434/decide", json=event).json()
-    if resp["status"] != "allow":
-        raise PermissionError("Action blocked")
-    requests.post("http://127.0.0.1:3434/events", json=event)
-    return resp
+headers = {"Authorization": f"Bearer {os.getenv('ECHOS_API_KEY')}"}
+event = {"agent": "my-agent", "intent": "slack.post", "target": "#general"}
 
-emit("llm.chat", "gpt-4o", {"costUsd": 0.01})
+resp = requests.post("http://127.0.0.1:3434/decide", json=event, headers=headers).json()
+if resp["status"] != "allow":
+    raise PermissionError("Action blocked")
 ```
+
+## Examples
+
+Check out the [`examples/`](examples/) directory for complete agent implementations:
+
+```bash
+# Set your API key
+export ECHOS_API_KEY=your-key-here
+
+# Run examples
+tsx examples/basic-usage.ts       # Core concepts
+tsx examples/input-filtering.ts   # PII detection
+tsx examples/roles-templates.ts   # Policy management
+tsx examples/code-reviewer.ts     # PR automation
+tsx examples/sales-bot.ts         # Deal monitoring
+```
+
+See [`examples/README.md`](examples/README.md) for full documentation.
 
 ## How It Works
 
 1. Agent emits action via SDK
-2. Daemon checks policy → `allow`, `block`, or `ask`  
-3. If `ask`, dashboard shows consent modal
-4. Human approves → action proceeds
+2. Daemon filters input (redacts PII, blocks injection attacks)
+3. Daemon checks policy → `allow`, `block`, or `ask`  
+4. If `ask`, dashboard shows consent modal
+5. Human approves → action proceeds
 
 ## Features
 
 - **Policy Engine** - Regex-based allow/ask/block rules
-- **Input Filtering** - PII detection and content sanitization  
-- **Spend Limits** - Daily/monthly AI cost controls
+- **Input Filtering** - Automatic PII redaction, injection prevention, and content classification
+- **Spend Limits** - Daily/monthly AI cost tracking
 - **Real-time Dashboard** - Live event feed and analytics
-- **Developer Tools** - Policy testing and template validation
+- **Multi-Tenant** - API keys with per-org data isolation
+- **Developer Tools** - Policy testing and validation
+
+## Documentation
+
+- **[Self-Hosting Guide](SELFHOSTING.md)** - Deploy to production (Docker, VPS, cloud platforms)
+- **[Examples](examples/)** - Complete agent implementations
+- **[Supabase Setup](supabase/README.md)** - Database configuration
 
 ## License
 

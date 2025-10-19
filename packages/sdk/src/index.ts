@@ -16,9 +16,13 @@ function debug(...args: any[]) {
   }
 }
 
-async function postJSON<T=any>(path:string, body:any){ try{
+// Global headers for API key authentication
+let globalHeaders: Record<string, string> = {};
+
+async function postJSON<T=any>(path:string, body:any, customHeaders?: Record<string, string>){ try{
   debug('POST', path, { bodyPreview: JSON.stringify(body).substring(0, 100) });
-  const res = await request(`${ENDPOINT}${path}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+  const headers = { "content-type":"application/json", ...globalHeaders, ...customHeaders };
+  const res = await request(`${ENDPOINT}${path}`, { method:"POST", headers, body: JSON.stringify(body) });
   const data = await res.body.json() as T;
   debug('Response', path, { status: res.statusCode, dataPreview: JSON.stringify(data).substring(0, 100) });
   return data;
@@ -28,8 +32,8 @@ async function postJSON<T=any>(path:string, body:any){ try{
 } }
 
 export class EchosClient {
-  constructor(public agent="default"){
-    debug('EchosClient created', { agent, endpoint: ENDPOINT });
+  constructor(public agent="default", private customHeaders?: Record<string, string>){
+    debug('EchosClient created', { agent, endpoint: ENDPOINT, hasCustomHeaders: !!customHeaders });
   }
   private token: EchosToken | null = null;
   setToken(t:EchosToken|null){ 
@@ -40,13 +44,13 @@ export class EchosClient {
 
   // Sugar: agent.authorize({ scopes, durationSec, reason })
   async authorize(opts: { scopes: string[], durationSec: number, reason: string }){
-    const data = await postJSON<{token:EchosToken}>("/tokens/issue", { agent:this.agent, ...opts });
+    const data = await postJSON<{token:EchosToken}>("/tokens/issue", { agent:this.agent, ...opts }, this.customHeaders);
     if (data?.token) this.token = data.token;
     return data?.token ?? null;
   }
 
   async requestConsent(scopes:string[], durationSec:number, reason:string){
-    const data = await postJSON<{token:EchosToken}>("/tokens/issue", { agent:this.agent, scopes, durationSec, reason });
+    const data = await postJSON<{token:EchosToken}>("/tokens/issue", { agent:this.agent, scopes, durationSec, reason }, this.customHeaders);
     if (data?.token) this.token = data.token;
     return data?.token ?? null;
   }
@@ -63,12 +67,12 @@ export class EchosClient {
       debug('Using token for authorization', { scopes: this.token.scopes });
     }
     
-    const decision = await postJSON<{status:Decision, id:string, policy?: PolicyMatch, message?: string}>("/decide", decidePayload) ?? { status:"allow" as Decision, id:evt.id };
-    debug('Policy decision', { status: decision.status, rule: decision.policy?.rule, source: decision.policy?.source });
+    const decision = await postJSON<{status:Decision, id:string, policy?: PolicyMatch, message?: string, duration?: number}>("/decide", decidePayload, this.customHeaders) ?? { status:"allow" as Decision, id:evt.id };
+    debug('Policy decision', { status: decision.status, rule: decision.policy?.rule, source: decision.policy?.source, duration: decision.duration });
 
     if (decision.status === "ask"){
       debug('Waiting for user consent...');
-      const wait = await postJSON<{status:"allow"|"block", token?:EchosToken}>(`/await/${evt.id}`, {});
+      const wait = await postJSON<{status:"allow"|"block", token?:EchosToken}>(`/await/${evt.id}`, {}, this.customHeaders);
       if (!wait || wait.status!=="allow") {
         const errorMsg = decision.message || "Echos: action denied";
         debug('Action denied', { message: errorMsg });
@@ -85,8 +89,8 @@ export class EchosClient {
       throw new Error(errorMsg);
     }
 
-    await postJSON("/events", { ...evt, tokenAttached: !!this.token, policy: decision.policy });
-    debug('Event recorded', { id: evt.id });
+    await postJSON("/events", { ...evt, tokenAttached: !!this.token, policy: decision.policy, duration: decision.duration }, this.customHeaders);
+    debug('Event recorded', { id: evt.id, duration: decision.duration });
     return evt;
   }
 
@@ -107,7 +111,7 @@ export class EchosClient {
         scopes?: string[]; 
         expiresAt?: number;
         tokenHash?: string;
-      }>("/tokens/introspect", { token });
+      }>("/tokens/introspect", { token }, this.customHeaders);
       return data ?? { active: false };
     } catch {
       return { active: false };
@@ -140,7 +144,7 @@ export class EchosClient {
         agentId: opts.agentId ?? this.agent,
         template: opts.template,
         overrides: opts.overrides
-      });
+      }, this.customHeaders);
       return data;
     } catch {
       return { ok: false, error: "Failed to apply role" };
@@ -191,7 +195,7 @@ export class EchosClient {
         intent: opts.intent,
         target: opts.target,
         policy: opts.policy
-      });
+      }, this.customHeaders);
       return data ?? { ok: false, error: "Request failed" };
     } catch {
       return { ok: false, error: "Failed to test policy" };
@@ -207,7 +211,7 @@ export class EchosClient {
         errors: string[];
         warnings: string[];
         parsed?: any;
-      }>("/templates/validate", { yaml });
+      }>("/templates/validate", { yaml }, this.customHeaders);
       return data ?? { ok: false, valid: false, errors: ["Request failed"], warnings: [] };
     } catch {
       return { ok: false, valid: false, errors: ["Failed to validate template"], warnings: [] };
@@ -296,4 +300,15 @@ export class EchosClient {
 }
 
 export function echos(name?:string){ return new EchosClient(name); }
+
+// Create an authenticated client with an API key
+export function echosWithApiKey(apiKey: string, agentName?: string) {
+  return new EchosClient(agentName ?? "default", { "x-api-key": apiKey });
+}
+
+// Set global API key for all future requests (alternative approach)
+export function setGlobalApiKey(apiKey: string) {
+  globalHeaders["x-api-key"] = apiKey;
+}
+
 export * from "./types.js";

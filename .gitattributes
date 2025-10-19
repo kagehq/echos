@@ -1,0 +1,13 @@
+# Ensure consistent line endings
+* text=auto
+
+# Treat .env files as text
+*.env text
+*.env.example text
+
+# Ensure shell scripts use LF
+*.sh text eol=lf
+
+# SQL migrations should use LF
+*.sql text eol=lf
+

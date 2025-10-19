@@ -1,15 +1,13 @@
-import { useToast } from './useToast'
-
 export function useCopy() {
-  const { success, error } = useToast()
+  const toast = useToast()
   
   const copy = async (text: string, label: string = 'Text') => {
     try {
       await navigator.clipboard.writeText(text)
-      success(`${label} copied to clipboard`)
+      toast.add({ title: `${label} copied to clipboard`, color: 'green' })
     } catch (e) {
       console.error('Failed to copy:', e)
-      error('Failed to copy to clipboard')
+      toast.add({ title: 'Failed to copy to clipboard', color: 'red' })
     }
   }
   
@@ -17,10 +15,10 @@ export function useCopy() {
     try {
       const text = JSON.stringify(data, null, 2)
       await navigator.clipboard.writeText(text)
-      success(`${label} copied to clipboard`)
+      toast.add({ title: `${label} copied to clipboard`, color: 'green' })
     } catch (e) {
       console.error('Failed to copy:', e)
-      error('Failed to copy to clipboard')
+      toast.add({ title: 'Failed to copy to clipboard', color: 'red' })
     }
   }
   

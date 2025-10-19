@@ -29,7 +29,9 @@ export default defineNuxtConfig({
     }
   },
   supabase: {
-    redirect: false
+    redirect: false,
+    url: process.env.NUXT_PUBLIC_SUPABASE_URL,
+    key: process.env.NUXT_PUBLIC_SUPABASE_KEY
   },
   compatibilityDate: '2024-04-03'
 })

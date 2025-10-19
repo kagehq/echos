@@ -4,16 +4,7 @@ This directory contains example agent scripts demonstrating Echos in action.
 
 ## Available Examples
 
-### 🌟 Your First Agent (`first-agent.ts`) **← START HERE**
-New to autonomous agents? This guided example shows you how to build your first agent with safety guardrails.
-
-**Perfect for**: Developers coming from interactive AI tools (Cursor, Claude, etc.)
-
-```bash
-tsx examples/first-agent.ts
-```
-
-### 🚀 Basic Usage (`basic-usage.ts`)
+### 🚀 Basic Usage (`basic-usage.ts`) **← START HERE**
 Simple introduction to Echos SDK showing core concepts and basic actions.
 
 **Scopes used**: `llm.chat`, `http.request`, `slack.post`, `fs.delete`, `email.send`
@@ -31,15 +22,6 @@ Demonstrates the roles and templates system for managing agent policies programm
 tsx examples/roles-templates.ts
 ```
 
-### 🛠️ Developer Tools (`developer-tools.ts`)
-Showcases advanced developer tools for testing and debugging policies.
-
-**Features**: Policy testing (dry-run), template validation, webhook management, debug mode
-
-```bash
-tsx examples/developer-tools.ts
-```
-
 ### 🛡️ Input Filtering (`input-filtering.ts`)
 Demonstrates content sanitization and PII detection to prevent sensitive data from entering agent conversations.
 
@@ -47,33 +29,6 @@ Demonstrates content sanitization and PII detection to prevent sensitive data fr
 
 ```bash
 tsx examples/input-filtering.ts
-```
-
-### 👥 User Management (`user-management.ts`)
-Programmatic user creation with capped spend limits - perfect for SaaS applications.
-
-**Features**: Create users with spend caps, issue API keys, monitor usage, enforce limits
-
-```bash
-tsx examples/user-management.ts
-```
-
-### ☁️ Cloudflare Integration (`cloudflare-integration.ts`)
-Integration with Cloudflare Durable Objects for per-user API key management.
-
-**Features**: 1 user = 1 Minecraft server = 1 durable object with spend capping
-
-```bash
-tsx examples/cloudflare-integration.ts
-```
-
-### 📊 Enhanced Metadata (`enhanced-metadata.ts`)
-Comprehensive demonstration of all enhanced metadata fields for production tracking.
-
-**Features**: Business context, performance metrics, audit trail, error tracking, correlation IDs
-
-```bash
-tsx examples/enhanced-metadata.ts
 ```
 
 ### 🤖 RecruitBot (`recruit-bot.ts`)
@@ -128,18 +83,23 @@ curl http://127.0.0.1:3434/scopes | jq
 
 ## Quick Start
 
-1. **Start the daemon and dashboard**:
+1. **Start the development stack**:
    ```bash
-   pnpm dev:daemon  # Terminal 1
-   pnpm dev:dashboard  # Terminal 2
+   pnpm run dev:stack
    ```
 
-2. **Run an example**:
+2. **Create an API key**:
+   - Visit `http://localhost:3000/settings`
+   - Click "Create New Key"
+   - Set `ECHOS_API_KEY` environment variable
+
+3. **Run an example**:
    ```bash
-   tsx examples/sales-bot.ts
+   export ECHOS_API_KEY=your-api-key-here
+   tsx examples/basic-usage.ts
    ```
 
-3. **Watch the dashboard** at `http://localhost:3000` to approve actions!
+4. **Watch the dashboard** at `http://localhost:3000` to see events in real-time!
 
 **🆕 NEW: Use the VSCode Extension!**
 
@@ -156,7 +116,12 @@ Test and control agents directly in your editor:
 ```typescript
 import { echos } from "@echoshq/sdk";
 
-const agent = echos("MyAgent");
+// Create agent with API key authentication
+const agent = echos("MyAgent", {
+  headers: {
+    'Authorization': `Bearer ${process.env.ECHOS_API_KEY}`
+  }
+});
 
 // Option 1: Apply a policy template (recommended)
 await agent.applyRole({ 
@@ -179,10 +144,9 @@ try {
 } catch (err) {
   console.error("Action denied:", err);
 }
-
-// Option 4: Use the fetch wrapper for HTTP requests
-const response = await agent.fetch("https://api.example.com/data");
 ```
+
+**Get your API key:** Visit `http://localhost:3000/settings` → Create New Key
 
 ## Tips
 

@@ -2,13 +2,28 @@
  * Echos SDK - Basic Usage Example
  * 
  * This example shows how to integrate Echos into your AI agent code.
+ * 
+ * Prerequisites:
+ * 1. Set ECHOS_API_KEY environment variable (get from http://localhost:3000/settings)
+ * 2. Run: pnpm run dev:stack
+ * 3. Run: tsx examples/basic-usage.ts
  */
 
 import { echos } from "@echoshq/sdk";
 
 async function main() {
-  // Create a client for your agent
-  const ak = echos("my_awesome_agent");
+  if (!process.env.ECHOS_API_KEY) {
+    console.error("❌ ECHOS_API_KEY environment variable not set!");
+    console.log("   Get your API key from: http://localhost:3000/settings");
+    process.exit(1);
+  }
+
+  // Create a client for your agent with API key
+  const ak = echos("my_awesome_agent", {
+    headers: {
+      'Authorization': `Bearer ${process.env.ECHOS_API_KEY}`
+    }
+  });
 
   console.log("Starting agent actions...\n");
 

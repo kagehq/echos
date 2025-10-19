@@ -2,11 +2,18 @@ node_modules
 dist
 .nuxt
 .output
-.env
-*.log
 .DS_Store
 .tools
 .tmp
+
+# Environment files (NEVER commit these - contain secrets!)
+.env
+.env.*
+*.env
+!*.env.example
+
+# Logs
+*.log
 
 # Test files (keep tests/ directory but ignore temp test files in root)
 test-*.mjs
@@ -14,3 +21,6 @@ test-*.js
 
 # User-specific role assignments
 .roles.json
+
+# Local Supabase (if using local development)
+.supabase/

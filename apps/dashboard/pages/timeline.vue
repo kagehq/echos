@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useDaemonApi } from '~/composables/useDaemonApi'
-import { useToast } from '~/composables/useToast'
 import { useCopy } from '~/composables/useCopy'
 
 definePageMeta({
-  ssr: false
+  ssr: false,
+  middleware: 'auth'
 })
 
 useHead({

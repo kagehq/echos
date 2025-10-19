@@ -6,18 +6,10 @@
   "scripts": {
     "build": "turbo build",
     "build:sdk": "pnpm -C packages/sdk build",
-    "build:demo": "pnpm -C packages/demo build",
-    "build:extension": "pnpm -C apps/vscode-extension build",
-    "build:all": "pnpm build:sdk && pnpm build:demo",
     "dev": "turbo run dev --parallel",
     "dev:daemon": "pnpm -C apps/daemon dev",
     "dev:dashboard": "pnpm -C apps/dashboard dev",
-    "dev:extension": "pnpm -C apps/vscode-extension dev",
-    "demo": "node packages/demo/dist/index.js",
-    "test": "node tests/comprehensive.test.mjs",
-    "prep": "pnpm -r install && turbo prune --scope=@echos/demo --docker",
-    "package:extension": "pnpm -C apps/vscode-extension package",
-    "setup:node": "./scripts/setup-node.sh",
+    "setup": "bash ./scripts/setup-supabase.sh",
     "dev:stack": "bash ./scripts/dev-stack.sh"
   },
   "devDependencies": {

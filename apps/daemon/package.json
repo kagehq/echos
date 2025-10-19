@@ -6,6 +6,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.75.1",
     "chokidar": "^4.0.3",
     "h3": "^1.11.1",
     "jose": "^6.1.0",

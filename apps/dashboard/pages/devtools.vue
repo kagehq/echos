@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useDaemonApi } from '~/composables/useDaemonApi'
-import { useToast } from '~/composables/useToast'
 
 definePageMeta({
-  ssr: false
+  ssr: false,
+  middleware: 'auth'
 })
 
 useHead({
@@ -15,7 +15,7 @@ useHead({
 })
 
 const { request, daemonError } = useDaemonApi()
-const { error: showError, success: showSuccess, warning: showWarning } = useToast()
+const toast = useToast() as any
 
 // Policy Testing
 const policyTestAgent = ref('test-agent')
@@ -82,16 +82,15 @@ async function testPolicy() {
     if (result) {
       testResult.value = result
       if (result.ok) {
-        const color = result.status === 'allow' ? 'success' : result.status === 'ask' ? 'warning' : 'error'
-        if (color === 'success') showSuccess(`Policy test: ${result.status}`)
-        else if (color === 'warning') showWarning(`Policy test: ${result.status}`)
-        else showError(`Policy test: ${result.status}`)
+        if (result.status === 'allow') toast.success(`Policy test: ${result.status}`)
+        else if (result.status === 'ask') toast.warning(`Policy test: ${result.status}`)
+        else toast.error(`Policy test: ${result.status}`)
       } else {
-        showError(result.error || 'Policy test failed')
+        toast.error(result.error || 'Policy test failed')
       }
     }
   } catch (e) {
-    showError('Failed to test policy')
+    toast.error('Failed to test policy')
   } finally {
     testing.value = false
   }
@@ -110,13 +109,13 @@ async function validateTemplate() {
     if (result) {
       validationResult.value = result
       if (result.valid) {
-        showSuccess('Template is valid!')
+        toast.success('Template is valid!')
       } else {
-        showError(`Template validation failed: ${result.errors.join(', ')}`)
+        toast.error(`Template validation failed: ${result.errors.join(', ')}`)
       }
     }
   } catch (e) {
-    showError('Failed to validate template')
+    toast.error('Failed to validate template')
   } finally {
     validating.value = false
   }
@@ -128,9 +127,11 @@ async function loadWebhooks() {
     const result = await request<{ webhooks: string[] }>('/webhooks')
     if (result) {
       webhooks.value = result.webhooks || []
+    } else {
+      toast.warning('Webhooks unavailable. Make sure you have an API key.')
     }
   } catch (e) {
-    showError('Failed to load webhooks')
+    toast.error('Failed to load webhooks. Check if daemon is running.')
   } finally {
     loadingWebhooks.value = false
   }
@@ -152,13 +153,13 @@ async function testInputFilter() {
     if (result) {
       inputFilterResult.value = result
       if (result.allowed) {
-        showSuccess('Input filter test completed!')
+        toast.success('Input filter test completed!')
       } else {
-        showWarning('Input was blocked or modified by filter')
+        toast.warning('Input was blocked or modified by filter')
       }
     }
   } catch (e) {
-    showError('Failed to test input filter')
+    toast.error('Failed to test input filter')
   } finally {
     testingInputFilter.value = false
   }
@@ -166,7 +167,7 @@ async function testInputFilter() {
 
 async function addWebhook() {
   if (!newWebhookUrl.value || !newWebhookUrl.value.startsWith('http')) {
-    showError('Please enter a valid webhook URL starting with http:// or https://')
+    toast.error('Please enter a valid webhook URL starting with http:// or https://')
     return
   }
   
@@ -179,12 +180,12 @@ async function addWebhook() {
     if (result?.ok) {
       webhooks.value = result.webhooks || []
       newWebhookUrl.value = ''
-      showSuccess('Webhook added')
+      toast.success('Webhook added')
     } else {
-      showError('Failed to add webhook')
+      toast.error('Failed to add webhook')
     }
   } catch (e) {
-    showError('Failed to add webhook')
+    toast.error('Failed to add webhook')
   }
 }
 
@@ -197,12 +198,12 @@ async function removeWebhook(url: string) {
     
     if (result?.ok) {
       webhooks.value = result.webhooks || []
-      showSuccess('Webhook removed')
+      toast.success('Webhook removed')
     } else {
-      showError('Failed to remove webhook')
+      toast.error('Failed to remove webhook')
     }
   } catch (e) {
-    showError('Failed to remove webhook')
+    toast.error('Failed to remove webhook')
   }
 }
 
@@ -212,7 +213,7 @@ if (process.client) {
   
   watch(daemonError, (error) => {
     if (error) {
-      showError("Connection error. The daemon may be down.")
+      toast.error("Connection error. The daemon may be down.")
     }
   })
 }
