@@ -1,9 +1,12 @@
 [phases.setup]
-nixPkgs = ["nodejs-18_x", "pnpm"]
+nixPkgs = ["nodejs-18_x"]
 
 [phases.install]
-cmds = ["pnpm install --frozen-lockfile"]
+cmds = ["npm install -g pnpm", "pnpm install --frozen-lockfile"]
 
 [phases.build]
 cmds = ["pnpm --filter @echoshq/sdk build"]
+
+[start]
+cmd = "cd apps/daemon && pnpm dev"
 
