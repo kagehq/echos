@@ -484,7 +484,7 @@ async function resume(t:any){
           >
             <div v-if="!searchQuery" class="mt-4 text-sm text-gray-400 bg-gray-500/5 border border-gray-500/20 rounded-lg p-4 max-w-lg space-y-3">
               <div>
-                <p class="font-semibold text-white mb-2">🚀 Getting Started</p>
+                <p class="font-semibold text-white mb-2">Getting Started</p>
                 <ol class="space-y-2 text-xs">
                   <li class="flex gap-2">
                     <span class="text-gray-500 shrink-0">1.</span>
@@ -500,7 +500,7 @@ async function resume(t:any){
                   </li>
                 </ol>
               </div>
-              <pre class="text-xs bg-black/50 border border-gray-500/20 rounded p-2 overflow-x-auto"><code class="text-green-300">npm install @echoshq/sdk
+              <pre class="text-xs bg-black/50 border border-gray-500/20 rounded p-3 text-left overflow-x-auto"><code class="text-green-300">npm install @echoshq/sdk
 
 <span class="text-gray-400">// In your agent code:</span>
 <span class="text-blue-300">import</span> { EchosClient } <span class="text-blue-300">from</span> <span class="text-amber-300">'@echoshq/sdk'</span>
@@ -520,7 +520,7 @@ async function resume(t:any){
   <span class="text-gray-400">// Perform the action</span>
 }</code></pre>
               <p class="text-xs text-gray-500">
-                📚 <a href="https://github.com/kagehq/echos" target="_blank" class="text-blue-300 hover:underline">View full documentation</a>
+                <a href="https://github.com/kagehq/echos" target="_blank" class="text-blue-300 hover:underline">View doc</a>
               </p>
             </div>
           </EmptyState>
