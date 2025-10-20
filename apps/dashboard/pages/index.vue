@@ -480,11 +480,48 @@ async function resume(t:any){
             v-else-if="!getFilteredFeed().length"
             :icon="searchQuery ? 'search' : 'clock'"
             :title="searchQuery ? 'No matching events' : 'No events yet'"
-            :description="searchQuery ? 'Try adjusting your search terms' : 'Events will appear here as agents perform actions. Try running the demo to generate some activity.'"
+            :description="searchQuery ? 'Try adjusting your search terms' : 'Events will appear here as agents perform actions.'"
           >
-            <div v-if="!searchQuery" class="mt-4 text-xs text-gray-500 bg-gray-500/5 border border-gray-500/20 rounded-lg p-3 max-w-md">
-              <p class="font-medium text-gray-400 mb-1">💡 Quick Tip:</p>
-              <p>Run <code class="px-1 py-0.5 bg-gray-500/20 rounded text-blue-300">pnpm demo</code> to generate test events</p>
+            <div v-if="!searchQuery" class="mt-4 text-sm text-gray-400 bg-gray-500/5 border border-gray-500/20 rounded-lg p-4 max-w-lg space-y-3">
+              <div>
+                <p class="font-semibold text-white mb-2">🚀 Getting Started</p>
+                <ol class="space-y-2 text-xs">
+                  <li class="flex gap-2">
+                    <span class="text-gray-500 shrink-0">1.</span>
+                    <span>Create an API key in <a href="/settings" class="text-blue-300 hover:underline">Settings</a></span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-gray-500 shrink-0">2.</span>
+                    <span>Assign a policy template to your agent in <a href="/roles" class="text-blue-300 hover:underline">Roles & Templates</a></span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-gray-500 shrink-0">3.</span>
+                    <span>Integrate Echos SDK into your AI agent:</span>
+                  </li>
+                </ol>
+              </div>
+              <pre class="text-xs bg-black/50 border border-gray-500/20 rounded p-2 overflow-x-auto"><code class="text-green-300">npm install @echoshq/sdk
+
+<span class="text-gray-400">// In your agent code:</span>
+<span class="text-blue-300">import</span> { EchosClient } <span class="text-blue-300">from</span> <span class="text-amber-300">'@echoshq/sdk'</span>
+
+<span class="text-blue-300">const</span> echos = <span class="text-blue-300">new</span> EchosClient({
+  apiKey: process.env.ECHOS_API_KEY
+})
+
+<span class="text-gray-400">// Before sensitive actions:</span>
+<span class="text-blue-300">const</span> decision = <span class="text-blue-300">await</span> echos.decide({
+  agent: <span class="text-amber-300">'my_agent'</span>,
+  intent: <span class="text-amber-300">'email.send'</span>,
+  target: <span class="text-amber-300">'user@example.com'</span>
+})
+
+<span class="text-blue-300">if</span> (decision.status === <span class="text-amber-300">'allow'</span>) {
+  <span class="text-gray-400">// Perform the action</span>
+}</code></pre>
+              <p class="text-xs text-gray-500">
+                📚 <a href="https://github.com/kagehq/echos" target="_blank" class="text-blue-300 hover:underline">View full documentation</a>
+              </p>
             </div>
           </EmptyState>
           <div v-for="(m,i) in getFilteredFeed()" :key="i" 
