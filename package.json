@@ -2,7 +2,10 @@
   "name": "echos",
   "private": true,
   "packageManager": "pnpm@10.12.4",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo build",
     "build:sdk": "pnpm -C packages/sdk build",
@@ -15,7 +18,15 @@
     "dev:stack": "bash ./scripts/dev-stack.sh"
   },
   "devDependencies": {
+    "tsx": "^4.20.6",
     "turbo": "^2.0.0"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.57",
+    "@langchain/core": "^1.0.2",
+    "@langchain/openai": "^1.0.0",
+    "ai": "^5.0.82",
+    "langchain": "^1.0.2",
+    "zod": "^4.1.12"
   }
 }
-

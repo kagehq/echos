@@ -96,6 +96,53 @@ if resp["status"] != "allow":
     raise PermissionError("Action blocked")
 ```
 
+## Framework Integrations
+
+Echos works as a **governance layer** for any agent framework. Just wrap your tools:
+
+**LangChain.js:**
+```ts
+import { DynamicTool } from "@langchain/core/tools";
+import { echos } from "@echoshq/sdk";
+
+const agent = echos("langchain-agent");
+
+const sendEmailTool = new DynamicTool({
+  name: "send_email",
+  func: async (input) => {
+    // Governance check before execution
+    await agent.emit("email.send", input.to);
+    return sendEmail(input);
+  }
+});
+```
+
+**Vercel AI SDK:**
+```ts
+import { tool } from 'ai';
+import { echos } from '@echoshq/sdk';
+
+const agent = echos('vercel-agent');
+
+const sendEmailTool = tool({
+  execute: async ({ to, body }) => {
+    await agent.emit('email.send', to);
+    return sendEmail(to, body);
+  }
+});
+```
+
+**Custom Frameworks:**
+```ts
+// Works with ANY agent framework - just wrap your tools
+async function governedTool(action: string, target: string) {
+  await agent.emit(action, target);
+  return yourExistingTool(action, target);
+}
+```
+
+**See integration examples**: [`langchain-integration.ts`](examples/langchain-integration.ts), [`vercel-ai-sdk.ts`](examples/vercel-ai-sdk.ts), [`custom-agent-framework.ts`](examples/custom-agent-framework.ts)
+
 ## Examples
 
 Check out the [`examples/`](examples/) directory for complete agent implementations:

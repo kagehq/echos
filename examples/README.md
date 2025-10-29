@@ -58,6 +58,49 @@ Automated PR review with GitHub API integration and email summaries.
 tsx examples/code-reviewer.ts
 ```
 
+---
+
+## Framework Integrations
+
+### 🔗 LangChain.js Integration (`langchain-integration.ts`)
+Shows how to add Echos governance to LangChain.js agents and tools.
+
+**Features**: Tool wrapping, policy enforcement, LLM agent governance
+
+```bash
+npm install langchain @langchain/openai @langchain/core
+tsx examples/langchain-integration.ts
+```
+
+### ⚡ Vercel AI SDK (`vercel-ai-sdk.ts`)
+Demonstrates Echos integration with Vercel AI SDK's tool system.
+
+**Features**: Tool governance, streaming support, multi-step workflows
+
+```bash
+npm install ai @ai-sdk/openai zod
+tsx examples/vercel-ai-sdk.ts
+```
+
+### 🛠️ Custom Framework Patterns (`custom-agent-framework.ts`)
+Four reusable patterns for integrating Echos with ANY agent framework.
+
+**Patterns**:
+- **Governed Tools**: Explicit wrapper functions
+- **Decorator Pattern**: TypeScript decorators for clean governance
+- **Middleware Pattern**: Action-based governance
+- **Proxy Pattern**: Zero-code-change automatic governance
+
+```bash
+tsx examples/custom-agent-framework.ts
+```
+
+**Use these patterns to integrate Echos with**:
+- LangGraph, AutoGPT, Semantic Kernel
+- Custom agent frameworks
+- Any tool-calling system
+- Third-party agent libraries
+
 ## Scope Taxonomy
 
 Echos uses a **fixed set of official scopes** to ensure consistency across agents. Always use these exact scope names:

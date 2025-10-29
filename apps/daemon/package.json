@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts"
+    "dev": "tsx --no-ipc src/index.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.1",
