@@ -117,6 +117,62 @@ tsx examples/custom-agent-framework.ts
 - Any tool-calling system
 - Third-party agent libraries
 
+### Chaos Engineering & Fault Injection (`chaos-testing.ts`)
+Comprehensive fault injection demo inspired by AppVerif.exe for testing agent resilience.
+
+**Test scenarios**:
+- **SDK-level chaos**: Client-side failures and latency injection
+- **Daemon-level chaos**: Policy-based probabilistic blocking
+- **Combined chaos**: Multi-layer fault injection
+- **DDOS testing**: Concurrent request storm simulation
+- **Reproducible chaos**: Seeded random for deterministic testing
+
+**Features**:
+- Probabilistic failure injection (configurable block rate)
+- Artificial latency simulation
+- Intent-specific targeting
+- Reproducible tests with seeds
+- Chaos metrics and analytics
+
+```bash
+# Run basic SDK chaos test
+tsx examples/chaos-testing.ts
+
+# Run with API key for full daemon chaos
+export ECHOS_API_KEY=your-key-here
+tsx examples/chaos-testing.ts
+```
+
+**Use cases**:
+- Test error handling and retry logic
+- Find DDOS vulnerabilities
+- Validate graceful degradation
+- Ensure production resilience
+
+**Configuration**:
+```ts
+// SDK-level chaos
+const agent = echos('test-agent', {
+  enabled: true,
+  block_rate: 0.2,      // 20% failure rate
+  latency_ms: 100,       // 100ms delay
+  target_intents: ['llm.chat'],
+  seed: 42              // Reproducible
+});
+
+// Daemon-level chaos
+await agent.applyRole({
+  template: 'unrestricted',
+  overrides: {
+    chaos: {
+      enabled: true,
+      block_rate: 0.15,
+      latency_ms: 50
+    }
+  }
+});
+```
+
 ## Scope Taxonomy
 
 Echos uses a **fixed set of official scopes** to ensure consistency across agents. Always use these exact scope names:

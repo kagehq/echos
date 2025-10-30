@@ -42,8 +42,11 @@ async function postJSON<T=any>(path:string, body:any, customHeaders?: Record<str
 } }
 
 export class EchosClient {
-  constructor(public agent="default", private customHeaders?: Record<string, string>){
-    debug('EchosClient created', { agent, endpoint: ENDPOINT, hasCustomHeaders: !!customHeaders });
+  private chaosConfig?: ChaosConfig;
+  
+  constructor(public agent="default", private customHeaders?: Record<string, string>, chaosConfig?: ChaosConfig){
+    debug('EchosClient created', { agent, endpoint: ENDPOINT, hasCustomHeaders: !!customHeaders, chaosEnabled: !!chaosConfig?.enabled });
+    this.chaosConfig = chaosConfig;
   }
   private token: EchosToken | null = null;
   setToken(t:EchosToken|null){ 
@@ -51,6 +54,32 @@ export class EchosClient {
     this.token = t; 
   }
   authHeader(){ return (this.token && this.token.status==="active" && Date.now()<this.token.expiresAt) ? {"x-echos-token": this.token.token } : {}; }
+
+  // Chaos injection logic (client-side)
+  private shouldInjectChaos(intent: string): boolean {
+    if (!this.chaosConfig?.enabled || !this.chaosConfig.block_rate) return false;
+    
+    // Check if intent is explicitly exempted
+    if (this.chaosConfig.exempt_intents?.includes(intent)) return false;
+    
+    // Check if we should only target specific intents
+    if (this.chaosConfig.target_intents && this.chaosConfig.target_intents.length > 0) {
+      if (!this.chaosConfig.target_intents.includes(intent)) return false;
+    }
+    
+    // Use seed if provided for reproducible chaos, otherwise use Math.random()
+    const random = this.chaosConfig.seed !== undefined 
+      ? this.seededRandom(this.chaosConfig.seed)
+      : Math.random();
+    
+    return random < this.chaosConfig.block_rate;
+  }
+
+  // Simple seeded random (for reproducible chaos)
+  private seededRandom(seed: number): number {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+  }
 
   // Sugar: agent.authorize({ scopes, durationSec, reason })
   async authorize(opts: { scopes: string[], durationSec: number, reason: string }){
@@ -69,6 +98,18 @@ export class EchosClient {
     debug('emit()', { agent: this.agent, intent, target, hasToken: !!this.token });
     
     const evt = { id:nanoid(), ts:Date.now(), agent:this.agent, intent, target, meta, preview:`${intent} → ${target??""}`.trim(), request, response, metadata };
+    
+    // Client-side chaos injection (for testing SDK behavior)
+    if (this.chaosConfig?.enabled && this.shouldInjectChaos(intent)) {
+      const errorMsg = `[CHAOS] Simulated failure (block_rate: ${(this.chaosConfig.block_rate || 0) * 100}%)`;
+      debug('Chaos injected:', { intent, agent: this.agent });
+      throw new Error(errorMsg);
+    }
+    
+    // Inject artificial latency if configured
+    if (this.chaosConfig?.enabled && this.chaosConfig.latency_ms && this.chaosConfig.latency_ms > 0) {
+      await new Promise(resolve => setTimeout(resolve, this.chaosConfig!.latency_ms));
+    }
     
     // Include token in decision request if we have one
     const decidePayload:any = { ...evt };
@@ -332,11 +373,11 @@ export class EchosClient {
   }
 }
 
-export function echos(name?:string){ return new EchosClient(name); }
+export function echos(name?:string, chaosConfig?: ChaosConfig){ return new EchosClient(name, undefined, chaosConfig); }
 
 // Create an authenticated client with an API key
-export function echosWithApiKey(apiKey: string, agentName?: string) {
-  return new EchosClient(agentName ?? "default", { "x-api-key": apiKey });
+export function echosWithApiKey(apiKey: string, agentName?: string, chaosConfig?: ChaosConfig) {
+  return new EchosClient(agentName ?? "default", { "x-api-key": apiKey }, chaosConfig);
 }
 
 // Set global API key for all future requests (alternative approach)

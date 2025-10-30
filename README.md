@@ -212,6 +212,45 @@ See [`examples/README.md`](examples/README.md) for full documentation.
 4. If `ask`, dashboard shows consent modal
 5. Human approves → action proceeds
 
+## Chaos Engineering & Fault Injection
+
+Test your agent's resilience with built-in chaos mode. Inspired by tools like AppVerif.exe, Echos can inject failures to find vulnerabilities:
+
+**SDK-Level Chaos** (client-side):
+```ts
+import { echos } from '@echoshq/sdk';
+
+const agent = echos('my-agent', {
+  enabled: true,
+  block_rate: 0.2,      // 20% of requests fail
+  latency_ms: 100,       // Add 100ms delay
+  target_intents: ['llm.chat']  // Only affect LLM calls
+});
+```
+
+**Daemon-Level Chaos** (policy-based):
+```ts
+await agent.applyRole({
+  template: 'unrestricted',
+  overrides: {
+    chaos: {
+      enabled: true,
+      block_rate: 0.15,   // 15% failure at policy level
+      latency_ms: 50,
+      seed: 12345         // Reproducible chaos
+    }
+  }
+});
+```
+
+**Use cases:**
+- Test error handling and retry logic
+- Find DDOS vulnerabilities
+- Validate graceful degradation
+- Ensure system resilience
+
+See [`examples/chaos-testing.ts`](examples/chaos-testing.ts) for comprehensive demos.
+
 ## Features
 
 - **Policy Engine** - Regex-based allow/ask/block rules
