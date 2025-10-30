@@ -6,8 +6,18 @@ const DEBUG_MODE = process.env.ECHOS_DEBUG === "1";
 
 type Decision = "allow"|"block"|"ask";
 type SpendLimitInfo = { timeframe: "daily" | "monthly"; category: "llm" | "total"; value: number; spent: number; remaining: number };
-type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean; limit?: SpendLimitInfo };
+type ChaosInjection = { triggered: boolean; latencyMs?: number; blockRate: number; seed?: number };
+type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean; limit?: SpendLimitInfo; chaos?: ChaosInjection };
 export type EchosToken = { token:string; expiresAt:number; scopes:string[]; status:"active"|"paused"|"revoked" };
+
+export type ChaosConfig = {
+  enabled?: boolean;
+  block_rate?: number;
+  latency_ms?: number;
+  seed?: number;
+  target_intents?: string[];
+  exempt_intents?: string[];
+};
 
 // Debug logging helper
 function debug(...args: any[]) {
@@ -133,12 +143,24 @@ export class EchosClient {
   async applyRole(opts: {
     agentId?: string;
     template: string;
-    overrides?: { allow?: string[]; ask?: string[]; block?: string[] };
+    overrides?: { 
+      allow?: string[]; 
+      ask?: string[]; 
+      block?: string[];
+      chaos?: ChaosConfig;
+      limits?: Record<string, number>;
+    };
   }){
     try {
       const data = await postJSON<{
         ok: boolean;
-        policy?: { allow: string[]; ask: string[]; block: string[] };
+        policy?: { 
+          allow: string[]; 
+          ask: string[]; 
+          block: string[];
+          chaos?: ChaosConfig;
+          limits?: Record<string, number>;
+        };
         error?: string;
       }>("/roles/apply", {
         agentId: opts.agentId ?? this.agent,
@@ -255,6 +277,17 @@ export class EchosClient {
       return { ok: true, webhooks: data?.webhooks ?? [] };
     } catch {
       return { ok: false, error: "Failed to remove webhook" };
+    }
+  }
+
+  // Get chaos metrics
+  async getChaosMetrics(){
+    try {
+      const res = await request(`${ENDPOINT}/metrics/chaos`, { method: "GET" });
+      const data = await res.body.json() as any;
+      return data ?? { stats: {}, agentsWithChaos: [], chaosInjectionRate: 0 };
+    } catch {
+      return { stats: {}, agentsWithChaos: [], chaosInjectionRate: 0 };
     }
   }
 

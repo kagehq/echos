@@ -1,0 +1,24 @@
+name: Chaos Testing (Development)
+version: 1
+description: Development template with 20% fault injection to test agent resilience and error handling.
+allow:
+  - llm.chat:*
+  - http.request:GET*
+  - email.send:*
+  - slack.post:*
+  - calendar.read:*
+  - calendar.write:*
+ask: []
+block:
+  - fs.delete:*
+chaos:
+  enabled: true
+  block_rate: 0.2  # Block 20% of requests randomly
+  latency_ms: 0    # No artificial latency
+  # Optional: Reproducible chaos for debugging
+  # seed: 42
+  # Optional: Only inject chaos for specific actions
+  # target_intents:
+  #   - slack.post
+  #   - email.send
+

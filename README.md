@@ -83,6 +83,49 @@ await agent.applyRole({
 await agent.emit('llm.chat', 'gpt-4o', { prompt }, undefined, undefined, { costUsd: 0.01 });
 ```
 
+### Chaos Engineering
+
+Test your agent's resilience with probabilistic fault injection:
+
+```ts
+// Development: 20% random failures to test error handling
+await agent.applyRole({
+  template: 'research_assistant',
+  overrides: {
+    chaos: {
+      enabled: true,
+      block_rate: 0.2,      // Block 20% of requests randomly
+      latency_ms: 0         // No artificial latency
+    }
+  }
+});
+
+// Production: Controlled 5% fault injection
+await agent.applyRole({
+  template: 'research_assistant',
+  overrides: {
+    chaos: {
+      enabled: true,
+      block_rate: 0.05,     // Block 5% of requests
+      target_intents: ['llm.chat', 'http.request:GET*'],
+      exempt_intents: ['http.request:GET*/health*']
+    }
+  }
+});
+
+// Get chaos metrics
+const metrics = await agent.getChaosMetrics();
+console.log(`Chaos injection rate: ${metrics.chaosInjectionRate}`);
+console.log(`Total blocked by chaos: ${metrics.stats.chaosTriggered}`);
+```
+
+**Use cases:**
+- Test agent retry logic and error handling
+- Validate graceful degradation under failures
+- Production chaos engineering (Netflix Chaos Monkey style)
+- Stress testing with reproducible failures (use `seed`)
+- Latency testing to simulate slow networks
+
 ### Python
 
 ```py
@@ -174,6 +217,7 @@ See [`examples/README.md`](examples/README.md) for full documentation.
 - **Policy Engine** - Regex-based allow/ask/block rules
 - **Input Filtering** - Automatic PII redaction, injection prevention, and content classification
 - **Spend Limits** - Daily/monthly AI cost tracking
+- **Chaos Engineering** - Probabilistic fault injection for testing agent resilience
 - **Real-time Dashboard** - Live event feed and analytics
 - **Multi-Tenant** - API keys with per-org data isolation
 - **Developer Tools** - Policy testing and validation

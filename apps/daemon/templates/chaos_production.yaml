@@ -1,0 +1,28 @@
+name: Chaos Production (Controlled)
+version: 1
+description: Controlled 5% fault injection for production chaos engineering. Safely tests resilience without major disruption.
+allow:
+  - llm.chat:*
+  - http.request:GET*
+  - calendar.read:*
+  - email.read:*
+ask:
+  - email.send:*
+  - slack.post:*
+  - calendar.write:*
+block:
+  - fs.delete:*
+  - fs.write:*
+chaos:
+  enabled: true
+  block_rate: 0.05     # Block only 5% of requests
+  latency_ms: 0        # No latency in production
+  # Only target non-critical actions
+  target_intents:
+    - llm.chat
+    - http.request:GET*
+  # Exempt critical paths
+  exempt_intents:
+    - http.request:GET*/health*
+    - http.request:GET*/api/critical*
+

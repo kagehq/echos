@@ -58,6 +58,30 @@ Automated PR review with GitHub API integration and email summaries.
 tsx examples/code-reviewer.ts
 ```
 
+<<<<<<< Current (Your changes)
+<<<<<<< Current (Your changes)
+### 🔥 Chaos Engineering (`chaos-engineering.ts`)
+=======
+### Chaos Engineering (`chaos-engineering.ts`)
+>>>>>>> Incoming (Background Agent changes)
+=======
+### Chaos Engineering (`chaos-engineering.ts`)
+>>>>>>> Incoming (Background Agent changes)
+Test agent resilience with probabilistic fault injection - find bugs before production.
+
+**Features**: Random failures, retry logic, reproducible chaos (seeds), latency injection, metrics
+
+```bash
+tsx examples/chaos-engineering.ts
+```
+
+**Use cases:**
+- Test error handling and retry logic
+- Production chaos engineering (5% fault injection)
+- Stress testing with high failure rates
+- Latency testing for slow networks
+- Reproducible debugging with seeds
+
 ---
 
 ## Framework Integrations
@@ -143,16 +167,6 @@ curl http://127.0.0.1:3434/scopes | jq
    ```
 
 4. **Watch the dashboard** at `http://localhost:3000` to see events in real-time!
-
-**🆕 NEW: Use the VSCode Extension!**
-
-Test and control agents directly in your editor:
-- Press `F5` to launch the extension
-- Open Command Palette: `Cmd+Shift+P`
-- Run: `Echos: Open Action Playground`
-- Test actions interactively without writing code!
-
-[Learn more →](../apps/vscode-extension/QUICKSTART.md)
 
 ## Building Your Own Agent
 
