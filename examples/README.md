@@ -4,7 +4,7 @@ This directory contains example agent scripts demonstrating Echos in action.
 
 ## Available Examples
 
-### 🚀 Basic Usage (`basic-usage.ts`) **← START HERE**
+### Basic Usage (`basic-usage.ts`) **← START HERE**
 Simple introduction to Echos SDK showing core concepts and basic actions.
 
 **Scopes used**: `llm.chat`, `http.request`, `slack.post`, `fs.delete`, `email.send`
@@ -13,7 +13,7 @@ Simple introduction to Echos SDK showing core concepts and basic actions.
 tsx examples/basic-usage.ts
 ```
 
-### 🎭 Roles & Templates (`roles-templates.ts`)
+### Roles & Templates (`roles-templates.ts`)
 Demonstrates the roles and templates system for managing agent policies programmatically.
 
 **Features**: Template listing, role application, policy inspection, role assignments
@@ -22,7 +22,7 @@ Demonstrates the roles and templates system for managing agent policies programm
 tsx examples/roles-templates.ts
 ```
 
-### 🛡️ Input Filtering (`input-filtering.ts`)
+### Input Filtering (`input-filtering.ts`)
 Demonstrates content sanitization and PII detection to prevent sensitive data from entering agent conversations.
 
 **Features**: PII detection, content classification, injection prevention, DSR compliance
@@ -31,7 +31,7 @@ Demonstrates content sanitization and PII detection to prevent sensitive data fr
 tsx examples/input-filtering.ts
 ```
 
-### 🤖 RecruitBot (`recruit-bot.ts`)
+### RecruitBot (`recruit-bot.ts`)
 Automated candidate outreach with email drafting and calendar scheduling.
 
 **Scopes used**: `email.send`, `calendar.read`, `calendar.write`
@@ -40,7 +40,7 @@ Automated candidate outreach with email drafting and calendar scheduling.
 tsx examples/recruit-bot.ts
 ```
 
-### 📊 SalesBot (`sales-bot.ts`)
+### SalesBot (`sales-bot.ts`)
 Deal monitoring with Slack notifications and LLM-drafted follow-ups.
 
 **Scopes used**: `slack.post`, `llm.chat`
@@ -49,7 +49,7 @@ Deal monitoring with Slack notifications and LLM-drafted follow-ups.
 tsx examples/sales-bot.ts
 ```
 
-### 🔍 CodeReviewer (`code-reviewer.ts`)
+### CodeReviewer (`code-reviewer.ts`)
 Automated PR review with GitHub API integration and email summaries.
 
 **Scopes used**: `http.request`, `llm.chat`, `slack.post`, `email.send`
@@ -58,15 +58,7 @@ Automated PR review with GitHub API integration and email summaries.
 tsx examples/code-reviewer.ts
 ```
 
-<<<<<<< Current (Your changes)
-<<<<<<< Current (Your changes)
-### 🔥 Chaos Engineering (`chaos-engineering.ts`)
-=======
 ### Chaos Engineering (`chaos-engineering.ts`)
->>>>>>> Incoming (Background Agent changes)
-=======
-### Chaos Engineering (`chaos-engineering.ts`)
->>>>>>> Incoming (Background Agent changes)
 Test agent resilience with probabilistic fault injection - find bugs before production.
 
 **Features**: Random failures, retry logic, reproducible chaos (seeds), latency injection, metrics
@@ -86,7 +78,7 @@ tsx examples/chaos-engineering.ts
 
 ## Framework Integrations
 
-### 🔗 LangChain.js Integration (`langchain-integration.ts`)
+### LangChain.js Integration (`langchain-integration.ts`)
 Shows how to add Echos governance to LangChain.js agents and tools.
 
 **Features**: Tool wrapping, policy enforcement, LLM agent governance
@@ -96,7 +88,7 @@ npm install langchain @langchain/openai @langchain/core
 tsx examples/langchain-integration.ts
 ```
 
-### ⚡ Vercel AI SDK (`vercel-ai-sdk.ts`)
+### Vercel AI SDK (`vercel-ai-sdk.ts`)
 Demonstrates Echos integration with Vercel AI SDK's tool system.
 
 **Features**: Tool governance, streaming support, multi-step workflows
@@ -106,7 +98,7 @@ npm install ai @ai-sdk/openai zod
 tsx examples/vercel-ai-sdk.ts
 ```
 
-### 🛠️ Custom Framework Patterns (`custom-agent-framework.ts`)
+### Custom Framework Patterns (`custom-agent-framework.ts`)
 Four reusable patterns for integrating Echos with ANY agent framework.
 
 **Patterns**:
@@ -221,4 +213,3 @@ try {
 - [Main README](../README.md)
 - [SDK Documentation](../packages/sdk/README.md)
 - [Dashboard Guide](../apps/dashboard/README.md)
-
