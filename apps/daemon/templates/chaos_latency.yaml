@@ -1,0 +1,18 @@
+name: Chaos Latency Testing
+version: 1
+description: Tests agent behavior under degraded network conditions with high latency but no failures.
+allow:
+  - llm.chat:*
+  - http.request:*
+  - email.send:*
+  - slack.post:*
+  - calendar.read:*
+  - calendar.write:*
+ask: []
+block:
+  - fs.delete:*
+chaos:
+  enabled: true
+  block_rate: 0.0      # Don't block any requests
+  latency_ms: 2000     # Add 2 seconds latency to all requests
+

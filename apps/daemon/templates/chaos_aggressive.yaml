@@ -1,0 +1,21 @@
+name: Chaos Aggressive (Stress Testing)
+version: 1
+description: Aggressive chaos injection with 50% block rate and latency for stress testing agent resilience under extreme conditions.
+allow:
+  - llm.chat:*
+  - http.request:*
+  - email.send:*
+  - slack.post:*
+  - calendar.read:*
+  - calendar.write:*
+ask: []
+block:
+  - fs.delete:*
+chaos:
+  enabled: true
+  block_rate: 0.5      # Block 50% of requests
+  latency_ms: 1000     # Add 1 second artificial latency to all requests
+  # Exempt critical intents from chaos
+  exempt_intents:
+    - http.request:GET*/health*
+

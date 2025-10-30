@@ -11,7 +11,8 @@ import {
   getRoleAssignment,
   listRoleAssignments,
   type ResolvedPolicy,
-  type PolicyLimits
+  type PolicyLimits,
+  type ChaosConfig
 } from "./policies.js";
 import { filterInput, INPUT_FILTER_POLICIES, InputFilterResult } from './input-filters.js';
 import { supabase } from './supabase.js';
@@ -44,7 +45,8 @@ import {
 
 type Decision = "allow"|"block"|"ask";
 type SpendLimitInfo = { timeframe: "daily" | "monthly"; category: "llm" | "total"; value: number; spent: number; remaining: number };
-type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean; limit?: SpendLimitInfo };
+type ChaosInjection = { triggered: boolean; latencyMs?: number; blockRate: number; seed?: number };
+type PolicyMatch = { status: Decision; rule?: string; source?: string; byToken?: boolean; limit?: SpendLimitInfo; chaos?: ChaosInjection };
 type TokenRecord = { 
   token:string; 
   agent:string; 
@@ -91,6 +93,10 @@ type EventMsg = {
   errorStack?: string;
   retryCount?: number;
   errorContext?: any;
+  // Chaos engineering
+  chaosInjected?: boolean;
+  chaosBlockRate?: number;
+  chaosLatencyMs?: number;
 };
 type TimelineEntry = EventMsg | { type: string; ts: number; action?: string; token?: string; [key: string]: any };
 
@@ -295,6 +301,65 @@ app.use(eventHandler((req) => {
   }
 }));
 
+// Seeded random number generator for reproducible chaos
+class SeededRandom {
+  private seed: number;
+  
+  constructor(seed: number) {
+    this.seed = seed;
+  }
+  
+  next(): number {
+    // Simple LCG (Linear Congruential Generator)
+    this.seed = (this.seed * 1664525 + 1013904223) % 4294967296;
+    return this.seed / 4294967296;
+  }
+}
+
+// Chaos injection helper
+function shouldInjectChaos(chaos: ChaosConfig, intent: string, eventId: string): ChaosInjection | null {
+  if (!chaos.enabled || !chaos.block_rate || chaos.block_rate <= 0) {
+    return null;
+  }
+  
+  // Check if intent is explicitly exempted
+  if (chaos.exempt_intents && chaos.exempt_intents.includes(intent)) {
+    return null;
+  }
+  
+  // Check if we should only target specific intents
+  if (chaos.target_intents && chaos.target_intents.length > 0) {
+    if (!chaos.target_intents.includes(intent)) {
+      return null;
+    }
+  }
+  
+  // Use seed if provided for reproducible chaos, otherwise use Math.random()
+  const random = chaos.seed !== undefined 
+    ? new SeededRandom(chaos.seed + hashString(eventId)).next()
+    : Math.random();
+  
+  const shouldBlock = random < chaos.block_rate;
+  
+  return {
+    triggered: shouldBlock,
+    latencyMs: chaos.latency_ms,
+    blockRate: chaos.block_rate,
+    seed: chaos.seed
+  };
+}
+
+// Simple string hash for seeding
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
 // Enhanced error context helper
 function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, source?: string, policyMatch?: PolicyMatch): string {
   const parts = [];
@@ -304,6 +369,10 @@ function buildErrorContext(e: EventMsg, status: Decision, matchedRule?: string, 
     if (matchedRule) parts.push(`Matched rule: "${matchedRule}"`);
     if (source) parts.push(`Source: ${source}`);
     parts.push(`Agent "${e.agent}" attempted: ${e.intent}${e.target ? ` → ${e.target}` : ''}`);
+
+    if (policyMatch?.chaos?.triggered) {
+      parts.push(`Chaos injection triggered (block_rate: ${(policyMatch.chaos.blockRate * 100).toFixed(1)}%)`);
+    }
 
     if (policyMatch?.limit) {
       const { timeframe, category, value, spent, remaining } = policyMatch.limit;
@@ -505,12 +574,37 @@ app.use(eventHandler(async (req) => {
     source = "limits";
   }
 
+  // Apply chaos injection if configured (only if not already blocked)
+  let chaosInjection: ChaosInjection | undefined;
+  if (status !== "block") {
+    const chaosConfig = roleAssignment?.policy?.chaos;
+    if (chaosConfig) {
+      const chaosResult = shouldInjectChaos(chaosConfig, e.intent, e.id);
+      if (chaosResult) {
+        chaosInjection = chaosResult;
+        
+        // Inject artificial latency if configured
+        if (chaosResult.latencyMs && chaosResult.latencyMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, chaosResult.latencyMs));
+        }
+        
+        // Apply probabilistic blocking
+        if (chaosResult.triggered) {
+          status = "block";
+          matchedRule = "chaos:probabilistic_block";
+          source = "chaos_injection";
+        }
+      }
+    }
+  }
+
   policyMatch = { 
     status, 
     rule: matchedRule || undefined, 
     source,
     byToken: false,
-    limit: limitInfo
+    limit: limitInfo,
+    chaos: chaosInjection
   };
   
   // Build error context for better messages
@@ -980,7 +1074,8 @@ app.use(eventHandler(async (req)=>{
     allow: assignment.policy.allow, 
     ask: assignment.policy.ask, 
     block: assignment.policy.block,
-    limits: assignment.policy.limits
+    limits: assignment.policy.limits,
+    chaos: assignment.policy.chaos
   };
 }));
 
@@ -1116,6 +1211,80 @@ app.use("/metrics/llm", eventHandler(async (req) => {
   );
 
   return { summary, totals };
+}));
+
+// Chaos metrics endpoint
+app.use("/metrics/chaos", eventHandler(async (req) => {
+  if (req.method !== "GET") return;
+
+  // Analyze timeline events for chaos injection statistics
+  const chaosEvents = TIMELINE.filter((e: any) => 
+    e.type === "event" && (e as any).event?.policy?.chaos
+  );
+
+  const stats = {
+    totalEvents: TIMELINE.filter((e: any) => e.type === "event").length,
+    chaosEnabled: chaosEvents.length,
+    chaosTriggered: chaosEvents.filter((e: any) => 
+      (e as any).event?.policy?.chaos?.triggered
+    ).length,
+    byAgent: {} as Record<string, { total: number; triggered: number; blockRate: number }>,
+    byIntent: {} as Record<string, { total: number; triggered: number; blockRate: number }>,
+  };
+
+  // Aggregate by agent
+  for (const event of chaosEvents) {
+    const eventData = (event as any).event;
+    const agent = eventData?.agent;
+    const triggered = eventData?.policy?.chaos?.triggered ?? false;
+    
+    if (agent && !stats.byAgent[agent]) {
+      stats.byAgent[agent] = { total: 0, triggered: 0, blockRate: 0 };
+    }
+    
+    if (agent) {
+      stats.byAgent[agent].total++;
+      if (triggered) stats.byAgent[agent].triggered++;
+      stats.byAgent[agent].blockRate = stats.byAgent[agent].triggered / stats.byAgent[agent].total;
+    }
+  }
+
+  // Aggregate by intent
+  for (const event of chaosEvents) {
+    const eventData = (event as any).event;
+    const intent = eventData?.intent;
+    const triggered = eventData?.policy?.chaos?.triggered ?? false;
+    
+    if (intent && !stats.byIntent[intent]) {
+      stats.byIntent[intent] = { total: 0, triggered: 0, blockRate: 0 };
+    }
+    
+    if (intent) {
+      stats.byIntent[intent].total++;
+      if (triggered) stats.byIntent[intent].triggered++;
+      stats.byIntent[intent].blockRate = stats.byIntent[intent].triggered / stats.byIntent[intent].total;
+    }
+  }
+
+  // Get agents with chaos enabled
+  const agentsWithChaos = listRoleAssignments()
+    .filter(a => a.policy.chaos?.enabled)
+    .map(a => ({
+      agent: a.agentId,
+      template: a.template,
+      blockRate: a.policy.chaos?.block_rate ?? 0,
+      latencyMs: a.policy.chaos?.latency_ms ?? 0,
+      targetIntents: a.policy.chaos?.target_intents,
+      exemptIntents: a.policy.chaos?.exempt_intents,
+    }));
+
+  return { 
+    stats,
+    agentsWithChaos,
+    chaosInjectionRate: stats.totalEvents > 0 
+      ? (stats.chaosTriggered / stats.totalEvents).toFixed(4)
+      : 0
+  };
 }));
 
 app.use("/timeline", eventHandler(async (req)=>{

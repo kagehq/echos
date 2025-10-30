@@ -12,6 +12,15 @@ export type PolicyLimits = {
   [key: string]: number | undefined;
 };
 
+export type ChaosConfig = {
+  enabled?: boolean;
+  block_rate?: number; // 0-1, probability of blocking requests
+  latency_ms?: number; // artificial latency to inject
+  seed?: number; // optional seed for reproducible chaos
+  target_intents?: string[]; // if specified, only apply chaos to these intents
+  exempt_intents?: string[]; // intents that should bypass chaos
+};
+
 export type RawPolicy = {
   name?: string;
   version?: number;
@@ -21,6 +30,7 @@ export type RawPolicy = {
   block?: string[];
   limits?: PolicyLimits;
   token?: { default_ttl_sec?: number };
+  chaos?: ChaosConfig;
 };
 
 export type ResolvedPolicy = {
@@ -28,6 +38,7 @@ export type ResolvedPolicy = {
   ask: string[];
   block: string[];
   limits?: PolicyLimits;
+  chaos?: ChaosConfig;
 };
 
 export type RoleAssignment = {
@@ -79,7 +90,16 @@ function mergePolicy(base: RawPolicy = {}, ov: RawPolicy = {}): ResolvedPolicy {
     return Object.keys(merged).length ? merged : undefined;
   })();
 
-  return { allow, ask, block, limits };
+  // Merge chaos configuration (override takes precedence)
+  const chaos: ChaosConfig | undefined = (() => {
+    const merged = { ...(base.chaos || {}) };
+    if (ov.chaos) {
+      Object.assign(merged, ov.chaos);
+    }
+    return Object.keys(merged).length ? merged : undefined;
+  })();
+
+  return { allow, ask, block, limits, chaos };
 }
 
 export async function ensureTemplatesScaffold() {
@@ -244,6 +264,7 @@ export function listTemplates() {
     ask: t.ask ?? [],
     block: t.block ?? [],
     limits: t.limits ?? undefined,
+    chaos: t.chaos ?? undefined,
   }));
 }
 
